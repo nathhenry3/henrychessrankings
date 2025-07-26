@@ -136,12 +136,14 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK and Application Logic -->
     <script type="module">
         // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // If you need analytics, import it here:
+        // import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
         // --- GLOBAL STATE AND CONFIG ---
         let db, auth, userId;
@@ -167,16 +169,27 @@
             // When running this file outside of the Canvas environment,
             // you must replace these placeholder values with your own
             // Firebase project's configuration.
-            const firebaseConfig = {
-				apiKey: "AIzaSyD6mh__50PPV-WTMVitcl3iEyArgw6HpmI",
-				authDomain: "henry-chess-rankings.firebaseapp.com",
-				projectId: "henry-chess-rankings",
-				storageBucket: "henry-chess-rankings.firebasestorage.app",
-				messagingSenderId: "572969866716",
-				appId: "1:572969866716:web:93d811059e3b74af2ceb19",
-				measurementId: "G-ZBTZ062688"
-			  };
+            // This is the placeholder configuration that will be used if __firebase_config is not defined.
+            // It should be replaced with your actual Firebase config if you run this outside the Canvas.
+            const firebaseConfigPlaceholder = {
 
+			  apiKey: "AIzaSyD6mh__50PPV-WTMVitcl3iEyArgw6HpmI",
+
+			  authDomain: "henry-chess-rankings.firebaseapp.com",
+
+			  projectId: "henry-chess-rankings",
+
+			  storageBucket: "henry-chess-rankings.firebasestorage.app",
+
+			  messagingSenderId: "572969866716",
+
+			  appId: "1:572969866716:web:93d811059e3b74af2ceb19",
+
+			  measurementId: "G-ZBTZ062688"
+
+			};
+
+            // This is the correct and only declaration of firebaseConfig
             const firebaseConfig = typeof __firebase_config !== 'undefined'
                 ? JSON.parse(__firebase_config)
                 : firebaseConfigPlaceholder;
@@ -195,11 +208,14 @@
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
+                // If you need analytics, uncomment and initialize here:
+                // const analytics = getAnalytics(app);
 
                 // Listen for authentication state changes
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
+                        initializeAppState();
                     } else {
                         try {
                             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -207,14 +223,12 @@
                             } else {
                                 await signInAnonymously(auth);
                             }
+                            // After sign-in, the onAuthStateChanged listener will be triggered again
+                            // with the user object, and initializeAppState will be called then.
                         } catch (error) {
                             console.error("Error signing in:", error);
                             showMessage("Error signing in.", 'error');
                         }
-                    }
-                    if (auth.currentUser) {
-                        userId = auth.currentUser.uid;
-                        initializeAppState();
                     }
                 });
             } catch (error) {
@@ -229,6 +243,11 @@
             setupEventListeners();
             listenForPlayerUpdates();
             listenForRankHistoryUpdates();
+            // Display the user ID for debugging/multi-user identification
+            const userIdDisplay = document.createElement('p');
+            userIdDisplay.className = 'text-center text-sm text-gray-400 mt-4';
+            userIdDisplay.textContent = `User ID: ${userId}`;
+            document.getElementById('app-container').appendChild(userIdDisplay);
         }
 
         // --- REAL-TIME DATA LISTENERS ---
@@ -615,7 +634,7 @@
                 e.preventDefault();
                 const newName = document.getElementById('edit-player-name-input').value.trim();
                 if (!newName) {
-                    alert("Player name cannot be empty."); // Simple alert inside modal context is ok
+                    showModal("Player name cannot be empty."); // Changed from alert to showModal
                     return;
                 }
                 try {
@@ -817,30 +836,5 @@
         }
 
     </script>
-	
-	<script type="module">
-	  // Import the functions you need from the SDKs you need
-	  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-	  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-analytics.js";
-	  // TODO: Add SDKs for Firebase products that you want to use
-	  // https://firebase.google.com/docs/web/setup#available-libraries
-
-	  // Your web app's Firebase configuration
-	  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-	  const firebaseConfig = {
-		apiKey: "AIzaSyD6mh__50PPV-WTMVitcl3iEyArgw6HpmI",
-		authDomain: "henry-chess-rankings.firebaseapp.com",
-		projectId: "henry-chess-rankings",
-		storageBucket: "henry-chess-rankings.firebasestorage.app",
-		messagingSenderId: "572969866716",
-		appId: "1:572969866716:web:93d811059e3b74af2ceb19",
-		measurementId: "G-ZBTZ062688"
-	  };
-
-	  // Initialize Firebase
-	  const app = initializeApp(firebaseConfig);
-	  const analytics = getAnalytics(app);
-	</script>
-	
 </body>
 </html>
