@@ -1,0 +1,835 @@
+import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Firebase context to provide db, auth, and userId throughout the app
+const FirebaseContext = createContext(null);
+
+const App = () => {
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
+  useEffect(() => {
+    // Initialize Firebase only once
+    try {
+      const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+      const app = initializeApp(firebaseConfig);
+      const firestoreDb = getFirestore(app);
+      const firebaseAuth = getAuth(app);
+
+      setDb(firestoreDb);
+      setAuth(firebaseAuth);
+
+      // Listen for auth state changes
+      const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
+        if (user) {
+          setUserId(user.uid);
+        } else {
+          // Sign in anonymously if no user is logged in
+          try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await signInWithCustomToken(firebaseAuth, __initial_auth_token);
+            } else {
+              await signInAnonymously(firebaseAuth);
+            }
+          } catch (error) {
+            console.error("Error signing in:", error);
+          }
+        }
+        setIsAuthReady(true);
+      });
+
+      return () => unsubscribe(); // Cleanup auth listener on unmount
+    } catch (error) {
+      console.error("Failed to initialize Firebase:", error);
+    }
+  }, []);
+
+  if (!isAuthReady) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
+        <p>Loading Firebase...</p>
+      </div>
+    );
+  }
+
+  return (
+    <FirebaseContext.Provider value={{ db, auth, userId }}>
+      <div className="min-h-screen bg-gray-900 text-gray-100 p-4 sm:p-6 lg:p-8 font-inter">
+        <h1 className="text-4xl sm:text-5xl font-bold text-center mb-8 text-amber-400">Henry Chess Rankings</h1>
+        <Leaderboard />
+        <RankingRules /> {/* New component for rules */}
+      </div>
+    </FirebaseContext.Provider>
+  );
+};
+
+// Leaderboard Component
+const Leaderboard = () => {
+  const { db, userId } = useContext(FirebaseContext);
+  const [players, setPlayers] = useState([]);
+  const [rankHistory, setRankHistory] = useState([]);
+  const [message, setMessage] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [modalContent, setModalContent] = useState('');
+  const [searchTerm, setSearchTerm] = useState(''); // State for player search filter
+
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
+  const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`;
+
+  useEffect(() => {
+    if (!db || !userId) return;
+
+    // Listen for real-time updates to players
+    const playersQuery = collection(db, playersCollectionPath);
+    const unsubscribePlayers = onSnapshot(playersQuery, (snapshot) => {
+      const fetchedPlayers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort players by rank
+      fetchedPlayers.sort((a, b) => a.rank - b.rank);
+      setPlayers(fetchedPlayers);
+    }, (error) => {
+      console.error("Error fetching players:", error);
+      showMessage("Error loading players.", 'error');
+    });
+
+    // Listen for real-time updates to rank history
+    const rankHistoryQuery = collection(db, rankHistoryCollectionPath);
+    const unsubscribeRankHistory = onSnapshot(rankHistoryQuery, (snapshot) => {
+      const fetchedHistory = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      // Sort history by timestamp
+      fetchedHistory.sort((a, b) => a.timestamp.toDate() - b.timestamp.toDate());
+      setRankHistory(fetchedHistory);
+    }, (error) => {
+      console.error("Error fetching rank history:", error);
+      showMessage("Error loading rank history.", 'error');
+    });
+
+    return () => {
+      unsubscribePlayers();
+      unsubscribeRankHistory();
+    };
+  }, [db, userId, appId, playersCollectionPath, rankHistoryCollectionPath]);
+
+  const showMessage = (msg, type = 'info') => {
+    setMessage(msg);
+    setTimeout(() => setMessage(''), 5000); // Clear message after 5 seconds
+  };
+
+  const showCustomModal = (content) => {
+    setModalContent(content);
+    setShowModal(true);
+  };
+
+  const closeCustomModal = () => {
+    setShowModal(false);
+    setModalContent('');
+  };
+
+  // Filter players based on search term for the combined leaderboard
+  const filteredPlayers = useMemo(() => {
+    if (!searchTerm) {
+      return players;
+    }
+    return players.filter(player =>
+      player.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [players, searchTerm]);
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-8"> {/* Increased max-width for more columns */}
+      {message && (
+        <div className={`p-3 rounded-lg text-center ${message.includes('Error') ? 'bg-red-700' : 'bg-blue-700'} text-white mb-4`}>
+          {message}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full border border-gray-700">
+            <p className="text-white text-center mb-4">{modalContent}</p>
+            <button
+              onClick={closeCustomModal}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      <PlayerForm showMessage={showMessage} showCustomModal={showCustomModal} players={players} />
+      <MatchForm showMessage={showMessage} showCustomModal={showCustomModal} players={players} />
+
+      <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+        <h2 className="text-3xl font-semibold text-amber-300 mb-4 text-center">Current Leaderboard & Player Statistics</h2>
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search player by name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+          />
+        </div>
+        {filteredPlayers.length === 0 ? (
+          <p className="text-center text-gray-400">No players yet or no players match your search. Add some players to get started!</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-700">
+              <thead className="bg-gray-700">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider rounded-tl-lg">Rank</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Player Name</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total Wins</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total Losses</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total Draws</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Overall Win %</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">White Win %</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Black Win %</th>
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider rounded-tr-lg">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-gray-800 divide-y divide-gray-700">
+                {filteredPlayers.map((player) => {
+                  const totalGames = player.wins + player.losses + player.draws;
+                  const overallWinRate = totalGames > 0 ? ((player.wins / totalGames) * 100).toFixed(2) : '0.00';
+
+                  const totalGamesAsWhite = (player.winsAsWhite || 0) + (player.lossesAsWhite || 0) + (player.drawsAsWhite || 0);
+                  const whiteWinRate = totalGamesAsWhite > 0 ? (((player.winsAsWhite || 0) / totalGamesAsWhite) * 100).toFixed(2) : '0.00';
+
+                  const totalGamesAsBlack = (player.winsAsBlack || 0) + (player.lossesAsBlack || 0) + (player.drawsAsBlack || 0);
+                  const blackWinRate = totalGamesAsBlack > 0 ? (((player.winsAsBlack || 0) / totalGamesAsBlack) * 100).toFixed(2) : '0.00';
+
+                  return (
+                    <tr key={player.id} className="hover:bg-gray-700 transition duration-150 ease-in-out">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-200">{player.rank}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">{player.name}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">{player.wins}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">{player.losses}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">{player.draws}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">{overallWinRate}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">{whiteWinRate}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-300">{blackWinRate}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <EditPlayerModal player={player} showMessage={showMessage} showCustomModal={showCustomModal} />
+                        <button
+                          onClick={() => {
+                            showCustomModal(
+                              <div className="text-center">
+                                <p className="mb-4">Are you sure you want to remove <span className="font-bold">{player.name}</span>? This action cannot be undone.</p>
+                                <div className="flex justify-center space-x-4">
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        await deleteDoc(doc(db, playersCollectionPath, player.id));
+                                        showMessage(`${player.name} removed successfully!`, 'success');
+                                        closeCustomModal();
+                                      } catch (error) {
+                                        console.error("Error removing player:", error);
+                                        showMessage(`Error removing ${player.name}.`, 'error');
+                                        closeCustomModal();
+                                      }
+                                    }}
+                                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                                  >
+                                    Yes, Remove
+                                  </button>
+                                  <button
+                                    onClick={closeCustomModal}
+                                    className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                            setShowModal(true);
+                          }}
+                          className="ml-2 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <RankHistoryChart rankHistory={rankHistory} players={players} />
+    </div>
+  );
+};
+
+// Player Form Component
+const PlayerForm = ({ showMessage, showCustomModal, players }) => {
+  const { db } = useContext(FirebaseContext);
+  const [playerName, setPlayerName] = useState('');
+
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
+  const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`;
+
+  const handleAddPlayer = async (e) => {
+    e.preventDefault();
+    if (!playerName.trim()) {
+      showCustomModal("Player name cannot be empty.");
+      return;
+    }
+
+    try {
+      // Check if player name already exists (case-insensitive)
+      const existingPlayersQuery = query(collection(db, playersCollectionPath), where("name", "==", playerName.trim()));
+      const existingPlayersSnapshot = await getDocs(existingPlayersQuery);
+      if (!existingPlayersSnapshot.empty) {
+        showCustomModal(`A player with the name "${playerName.trim()}" already exists.`);
+        return;
+      }
+
+      const batch = writeBatch(db);
+
+      // 1. Increment ranks of all existing players by 1
+      const currentPlayersSnapshot = await getDocs(collection(db, playersCollectionPath));
+      currentPlayersSnapshot.docs.forEach(docSnap => {
+        const playerRef = doc(db, playersCollectionPath, docSnap.id);
+        batch.update(playerRef, { rank: docSnap.data().rank + 1 });
+      });
+
+      // 2. Add the new player at rank 1 with new stat fields
+      const newPlayerRef = doc(collection(db, playersCollectionPath)); // Get a new doc reference with auto-generated ID
+      batch.set(newPlayerRef, {
+        name: playerName.trim(),
+        rank: 1, // New players start at rank 1
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        winsAsWhite: 0,
+        lossesAsWhite: 0,
+        drawsAsWhite: 0,
+        winsAsBlack: 0,
+        lossesAsBlack: 0,
+        drawsAsBlack: 0,
+        recentMatchHistory: {}, // Stores streak and last outcome against specific opponents
+      });
+
+      await batch.commit();
+
+      // After successful batch commit, record the new rank history snapshot
+      const updatedPlayersSnapshot = await getDocs(collection(db, playersCollectionPath));
+      const updatedPlayers = updatedPlayersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const currentRankings = updatedPlayers.map(p => ({
+          playerId: p.id,
+          playerName: p.name,
+          rank: p.rank
+      }));
+      await addDoc(collection(db, rankHistoryCollectionPath), {
+          timestamp: new Date(),
+          rankings: currentRankings,
+      });
+
+      setPlayerName('');
+      showMessage(`${playerName.trim()} added successfully at Rank 1!`, 'success');
+    } catch (error) {
+      console.error("Error adding player:", error);
+      showMessage("Error adding player.", 'error');
+    }
+  };
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+      <h2 className="text-3xl font-semibold text-amber-300 mb-4 text-center">Add New Player</h2>
+      <form onSubmit={handleAddPlayer} className="flex flex-col sm:flex-row gap-4">
+        <input
+          type="text"
+          placeholder="Player Name"
+          value={playerName}
+          onChange={(e) => setPlayerName(e.target.value)}
+          className="flex-grow p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+        />
+        <button
+          type="submit"
+          className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg"
+        >
+          Add Player
+        </button>
+      </form>
+    </div>
+  );
+};
+
+// Edit Player Modal Component
+const EditPlayerModal = ({ player, showMessage, showCustomModal }) => {
+  const { db } = useContext(FirebaseContext);
+  const [isOpen, setIsOpen] = useState(false);
+  const [newName, setNewName] = useState(player.name);
+
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
+
+  const handleEditPlayer = async (e) => {
+    e.preventDefault();
+    if (!newName.trim()) {
+      showCustomModal("Player name cannot be empty.");
+      return;
+    }
+    if (newName.trim() === player.name) {
+      setIsOpen(false); // Close if no change
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, playersCollectionPath, player.id), {
+        name: newName.trim(),
+      });
+      showMessage(`Player name updated to ${newName.trim()}!`, 'success');
+      setIsOpen(false);
+    } catch (error) {
+      console.error("Error updating player name:", error);
+      showMessage("Error updating player name.", 'error');
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(true)}
+        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+      >
+        Edit
+      </button>
+
+      {isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full border border-gray-700">
+            <h3 className="text-2xl font-semibold text-amber-300 mb-4 text-center">Edit Player Name</h3>
+            <form onSubmit={handleEditPlayer} className="space-y-4">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+              />
+              <div className="flex justify-end space-x-4">
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// Match Form Component
+const MatchForm = ({ showMessage, showCustomModal, players }) => {
+  const { db } = useContext(FirebaseContext);
+  const [whitePlayerId, setWhitePlayerId] = useState('');
+  const [blackPlayerId, setBlackPlayerId] = useState('');
+  const [winnerId, setWinnerId] = useState(''); // Can be whitePlayerId, blackPlayerId, or 'draw'
+
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
+  const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`;
+
+  const handleRecordMatch = async (e) => {
+    e.preventDefault();
+
+    if (!whitePlayerId || !blackPlayerId || !winnerId) {
+      showCustomModal("Please select both players and the match outcome.");
+      return;
+    }
+    if (whitePlayerId === blackPlayerId) {
+      showCustomModal("A player cannot play against themselves.");
+      return;
+    }
+
+    try {
+      const whitePlayerRef = doc(db, playersCollectionPath, whitePlayerId);
+      const blackPlayerRef = doc(db, playersCollectionPath, blackPlayerId);
+
+      const whitePlayerSnap = await getDoc(whitePlayerRef);
+      const blackPlayerSnap = await getDoc(blackPlayerRef);
+
+      if (!whitePlayerSnap.exists() || !blackPlayerSnap.exists()) {
+        showMessage("One or both players not found. Please refresh.", 'error');
+        return;
+      }
+
+      let whiteData = whitePlayerSnap.data();
+      let blackData = blackPlayerSnap.data();
+
+      // Ensure new stats fields exist and are initialized
+      whiteData.winsAsWhite = whiteData.winsAsWhite || 0;
+      whiteData.lossesAsWhite = whiteData.lossesAsWhite || 0;
+      whiteData.drawsAsWhite = whiteData.drawsAsWhite || 0;
+      whiteData.winsAsBlack = whiteData.winsAsBlack || 0;
+      whiteData.lossesAsBlack = whiteData.lossesAsBlack || 0;
+      whiteData.drawsAsBlack = whiteData.drawsAsBlack || 0;
+
+      blackData.winsAsWhite = blackData.winsAsWhite || 0;
+      blackData.lossesAsWhite = blackData.lossesAsWhite || 0;
+      blackData.drawsAsWhite = blackData.drawsAsWhite || 0;
+      blackData.winsAsBlack = blackData.winsAsBlack || 0;
+      blackData.lossesAsBlack = blackData.lossesAsBlack || 0;
+      blackData.drawsAsBlack = blackData.drawsAsBlack || 0;
+
+      // Initialize recentMatchHistory if it doesn't exist
+      whiteData.recentMatchHistory = whiteData.recentMatchHistory || {};
+      blackData.recentMatchHistory = blackData.recentMatchHistory || {};
+
+      let rankChanged = false;
+
+      if (winnerId === 'draw') {
+        whiteData.draws++;
+        blackData.draws++;
+        whiteData.drawsAsWhite++; // White player drew as White
+        blackData.drawsAsBlack++; // Black player drew as Black
+
+        // Reset streaks for both players against each other on a draw
+        if (whiteData.recentMatchHistory[blackPlayerId]) {
+          whiteData.recentMatchHistory[blackPlayerId] = { lastOutcome: 'draw', streak: 0 };
+        }
+        if (blackData.recentMatchHistory[whitePlayerId]) {
+          blackData.recentMatchHistory[whitePlayerId] = { lastOutcome: 'draw', streak: 0 };
+        }
+      } else {
+        const winnerData = winnerId === whitePlayerId ? whiteData : blackData;
+        const loserData = winnerId === whitePlayerId ? blackData : whiteData;
+        const winnerOpponentId = winnerId === whitePlayerId ? blackPlayerId : whitePlayerId;
+        const loserOpponentId = winnerId === whitePlayerId ? whitePlayerId : blackPlayerId;
+
+        winnerData.wins++;
+        loserData.losses++;
+
+        // Update color-specific stats
+        if (winnerId === whitePlayerId) { // White player won
+          whiteData.winsAsWhite++;
+          blackData.lossesAsBlack++;
+        } else { // Black player won
+          blackData.winsAsBlack++;
+          whiteData.lossesAsWhite++;
+        }
+
+        // Update winner's recent match history
+        const winnerOpponentHistory = winnerData.recentMatchHistory[winnerOpponentId] || { lastOutcome: '', streak: 0 };
+        if (winnerOpponentHistory.lastOutcome === 'win' && winnerOpponentHistory.streak === 1) {
+          winnerOpponentHistory.streak = 2;
+        } else {
+          winnerOpponentHistory.streak = 1;
+        }
+        winnerOpponentHistory.lastOutcome = 'win';
+        winnerData.recentMatchHistory[winnerOpponentId] = winnerOpponentHistory;
+
+        // Update loser's recent match history (streak resets for loser)
+        const loserOpponentHistory = loserData.recentMatchHistory[loserOpponentId] || { lastOutcome: '', streak: 0 };
+        loserOpponentHistory.streak = 0; // Loser's streak against this opponent resets
+        loserOpponentHistory.lastOutcome = 'loss';
+        loserData.recentMatchHistory[loserOpponentId] = loserOpponentHistory;
+
+        // Check for leapfrog condition
+        if (winnerOpponentHistory.streak === 2 && winnerData.rank > loserData.rank) {
+          // Leapfrog! Swap ranks
+          const tempRank = winnerData.rank;
+          winnerData.rank = loserData.rank;
+          loserData.rank = tempRank;
+          rankChanged = true;
+          showMessage(`${winnerData.name} beat ${loserData.name} twice in a row and leapfrogged them!`, 'success');
+        }
+      }
+
+      // Update players in Firestore
+      await updateDoc(whitePlayerRef, whiteData);
+      await updateDoc(blackPlayerRef, blackData);
+
+      // Record rank history snapshot if ranks changed or it's just a regular match
+      if (rankChanged || winnerId !== 'draw') {
+          const currentRankings = players.map(p => ({
+              playerId: p.id,
+              playerName: p.name,
+              rank: p.id === whitePlayerId ? whiteData.rank : (p.id === blackPlayerId ? blackData.rank : p.rank) // Use updated ranks for the two players involved
+          }));
+          await addDoc(collection(db, rankHistoryCollectionPath), {
+              timestamp: new Date(),
+              rankings: currentRankings,
+          });
+      }
+
+      setWhitePlayerId('');
+      setBlackPlayerId('');
+      setWinnerId('');
+      if (!rankChanged) {
+        showMessage("Match recorded successfully!", 'success');
+      }
+    } catch (error) {
+      console.error("Error recording match:", error);
+      showMessage("Error recording match.", 'error');
+    }
+  };
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+      <h2 className="text-3xl font-semibold text-amber-300 mb-4 text-center">Record Match</h2>
+      <form onSubmit={handleRecordMatch} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="whitePlayer" className="block text-sm font-medium text-gray-300 mb-1">White:</label>
+            <select
+              id="whitePlayer"
+              value={whitePlayerId}
+              onChange={(e) => setWhitePlayerId(e.target.value)}
+              className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+            >
+              <option value="">Select White Player</option>
+              {players.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="blackPlayer" className="block text-sm font-medium text-gray-300 mb-1">Black:</label>
+            <select
+              id="blackPlayer"
+              value={blackPlayerId}
+              onChange={(e) => setBlackPlayerId(e.target.value)}
+              className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+            >
+              <option value="">Select Black Player</option>
+              {players.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="winner" className="block text-sm font-medium text-gray-300 mb-1">Outcome:</label>
+          <select
+            id="winner"
+            value={winnerId}
+            onChange={(e) => setWinnerId(e.target.value)}
+            className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+          >
+            <option value="">Select Outcome</option>
+            {whitePlayerId && <option value={whitePlayerId}>{players.find(p => p.id === whitePlayerId)?.name} (White) Wins</option>}
+            {blackPlayerId && <option value={blackPlayerId}>{players.find(p => p.id === blackPlayerId)?.name} (Black) Wins</option>}
+            <option value="draw">Draw</option>
+          </select>
+        </div>
+
+        <button
+          type="submit"
+          className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg"
+        >
+          Record Match
+        </button>
+      </form>
+    </div>
+  );
+};
+
+// Rank History Chart Component
+const RankHistoryChart = ({ rankHistory, players }) => {
+  const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [startDate, setStartDate] = useState(''); // State for start date filter
+  const [endDate, setEndDate] = useState('');   // State for end date filter
+
+  // Filter rank history based on date range
+  const filteredRankHistory = useMemo(() => {
+    let filtered = rankHistory;
+    if (startDate) {
+      const startOfDay = new Date(startDate);
+      startOfDay.setHours(0, 0, 0, 0); // Start of the selected day
+      filtered = filtered.filter(snapshot => snapshot.timestamp.toDate().getTime() >= startOfDay.getTime());
+    }
+    if (endDate) {
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999); // End of the selected day
+      filtered = filtered.filter(snapshot => snapshot.timestamp.toDate().getTime() <= endOfDay.getTime());
+    }
+    return filtered;
+  }, [rankHistory, startDate, endDate]);
+
+  // Memoize chart data to prevent unnecessary re-renders
+  const chartData = useMemo(() => {
+    return filteredRankHistory.map(snapshot => {
+      const dataPoint = {
+        timestamp: snapshot.timestamp.toDate().getTime(), // Numerical timestamp for linear axis
+      };
+      snapshot.rankings.forEach(ranking => {
+        dataPoint[ranking.playerName] = ranking.rank; // Player name as key, rank as value
+      });
+      return dataPoint;
+    });
+  }, [filteredRankHistory]);
+
+  // Get all unique player names for the lines
+  const allPlayerNames = useMemo(() => players.map(p => p.name), [players]);
+
+  // Filtered player names for the chart lines
+  const playersToDisplay = selectedPlayers.length > 0 ? selectedPlayers : allPlayerNames;
+
+  // Determine max rank for Y-axis domain
+  const maxRank = players.length > 0 ? Math.max(...players.map(p => p.rank)) : 1;
+
+  const handlePlayerToggle = (playerName) => {
+    setSelectedPlayers(prev =>
+      prev.includes(playerName)
+        ? prev.filter(name => name !== playerName)
+        : [...prev, playerName]
+    );
+  };
+
+  return (
+    <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+      <h2 className="text-3xl font-semibold text-amber-300 mb-4 text-center">Rank History</h2>
+
+      {allPlayerNames.length > 0 && (
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-300 mb-2">Filter Players:</label>
+          <div className="flex flex-wrap gap-2">
+            {allPlayerNames.map(name => (
+              <button
+                key={name}
+                onClick={() => handlePlayerToggle(name)}
+                className={`px-3 py-1 rounded-full text-sm font-semibold transition duration-200 ease-in-out
+                  ${selectedPlayers.includes(name) ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+              >
+                {name}
+              </button>
+            ))}
+            {selectedPlayers.length > 0 && (
+              <button
+                onClick={() => setSelectedPlayers([])}
+                className="px-3 py-1 rounded-full text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition duration-200 ease-in-out"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Date Range Filters */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        <div className="flex-1">
+          <label htmlFor="startDate" className="block text-sm font-medium text-gray-300 mb-1">Start Date:</label>
+          <input
+            type="date"
+            id="startDate"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+          />
+        </div>
+        <div className="flex-1">
+          <label htmlFor="endDate" className="block text-sm font-medium text-gray-300 mb-1">End Date:</label>
+          <input
+            type="date"
+            id="endDate"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+
+      {chartData.length === 0 ? (
+        <p className="text-center text-gray-400">No match history yet or no data for the selected date range. Record some matches to see the graph!</p>
+      ) : (
+        <ResponsiveContainer width="100%" height={400}>
+          <LineChart
+            data={chartData}
+            margin={{
+              top: 5,
+              right: 30,
+              left: 20,
+              bottom: 5,
+            }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
+            <XAxis
+              dataKey="timestamp" // Use the numerical timestamp
+              type="number"       // Set type to number for linear scale
+              domain={['dataMin', 'dataMax']} // Automatically scale based on data
+              scale="time"        // Use time scale for proper date rendering
+              tickFormatter={(tick) => new Date(tick).toLocaleDateString()} // Format for display
+              stroke="#cbd5e0"
+            />
+            <YAxis
+              stroke="#cbd5e0"
+              domain={[1, maxRank + 1]} // Ranks start from 1, so adjust domain
+              reversed={true} // Lower rank is better, so reverse Y-axis
+              tickFormatter={(tick) => `Rank ${Math.round(tick)}`} // Ensure integer ticks
+              allowDecimals={false} // Prevent decimal ticks
+              interval="preserveStartEnd" // Preserve start/end ticks
+            />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#2d3748', border: 'none', borderRadius: '8px' }}
+              labelStyle={{ color: '#a0aec0' }}
+              itemStyle={{ color: '#e2e8f0' }}
+              formatter={(value, name) => [`Rank ${Math.round(value)}`, name]} // Ensure integer in tooltip
+              labelFormatter={(label) => new Date(label).toLocaleString()} // Show full datetime in tooltip
+            />
+            <Legend wrapperStyle={{ color: '#cbd5e0' }} />
+            {playersToDisplay.map((name, index) => (
+              <Line
+                key={name}
+                type="monotone"
+                dataKey={name}
+                stroke={`hsl(${index * 137 % 360}, 70%, 60%)`} // Generate distinct colors
+                activeDot={{ r: 8 }}
+                strokeWidth={2}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
+};
+
+// New component for displaying ranking rules
+const RankingRules = () => {
+  return (
+    <div className="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 mt-8">
+      <h2 className="text-3xl font-semibold text-amber-300 mb-4 text-center">Ranking Rules</h2>
+      <div className="space-y-2 text-gray-300">
+        <div>
+          <span className="font-bold text-amber-200">1)</span> To leapfrog a higher-ranked player, you must defeat them twice in a row. Draws do not count towards winning or breaking this streak.
+        </div>
+        <div>
+          <span className="font-bold text-amber-200">2)</span> All chess games count. The time controls of a game don't matter.
+        </div>
+        <div>
+          <span className="font-bold text-amber-200">3)</span> Any new player goes straight to the top of the rankings.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
