@@ -81,6 +81,9 @@
                     </div>
                     <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Record Match</button>
                 </form>
+                <div class="mt-4 text-center">
+                    <button id="undo-match-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg" disabled>Undo Last Match</button>
+                </div>
             </div>
 
             <!-- Leaderboard Table -->
@@ -124,6 +127,7 @@
         let db, auth, userId;
         let players = [];
         // rankHistory and related chart variables are no longer needed
+        let lastMatchData = null; // Stores data needed to undo the last match
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
@@ -135,6 +139,7 @@
         const messageBarEl = document.getElementById('message-bar');
         const leaderboardContainerEl = document.getElementById('leaderboard-container');
         const searchPlayerInput = document.getElementById('search-player');
+        const undoMatchBtn = document.getElementById('undo-match-btn');
         
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -316,6 +321,7 @@
             // Forms
             document.getElementById('add-player-form').addEventListener('submit', handleAddPlayer);
             document.getElementById('record-match-form').addEventListener('submit', handleRecordMatch);
+            document.getElementById('undo-match-btn').addEventListener('click', confirmUndoLastMatch); // Changed to confirmUndoLastMatch
 
             // Player dropdowns
             document.getElementById('white-player').addEventListener('change', updateWinnerDropdown);
@@ -502,6 +508,10 @@
                 let whiteData = { ...whitePlayerSnap.data() };
                 let blackData = { ...blackPlayerSnap.data() };
 
+                // Store original data for undo functionality
+                const originalWhiteData = JSON.parse(JSON.stringify(whiteData)); // Deep copy
+                const originalBlackData = JSON.parse(JSON.stringify(blackData)); // Deep copy
+
                 // Initialize stats if they don't exist
                 const statFields = ['winsAsWhite', 'lossesAsWhite', 'drawsAsWhite', 'winsAsBlack', 'lossesAsBlack', 'drawsAsBlack', 'recentMatchHistory'];
                 [whiteData, blackData].forEach(playerData => {
@@ -575,17 +585,29 @@
                 batch.update(blackPlayerRef, blackData);
                 await batch.commit();
 
-                // Record rank history snapshot (still needed for data integrity, even if not displayed)
+                // Record rank history snapshot
                 const currentPlayers = players.map(p => {
                     if (p.id === whitePlayerId) return { ...p, ...whiteData };
                     if (p.id === blackPlayerId) return { ...p, ...blackData };
                     return p;
                 });
                 const currentRankings = currentPlayers.map(p => ({ playerId: p.id, playerName: p.name, rank: p.rank }));
-                await addDoc(collection(db, rankHistoryCollectionPath), {
+                const newRankHistoryDocRef = await addDoc(collection(db, rankHistoryCollectionPath), {
                     timestamp: new Date(),
                     rankings: currentRankings,
                 });
+
+                // Store data for undo functionality
+                lastMatchData = {
+                    whitePlayerId,
+                    blackPlayerId,
+                    winnerId,
+                    rankHistoryDocId: newRankHistoryDocRef.id,
+                    originalWhitePlayerStats: originalWhiteData,
+                    originalBlackPlayerStats: originalBlackData,
+                    didRankSwap: rankChanged
+                };
+                undoMatchBtn.disabled = false; // Enable undo button
 
                 showMessage(messageText, 'success');
                 document.getElementById('record-match-form').reset();
@@ -594,6 +616,67 @@
             } catch (error) {
                 console.error("Error recording match:", error);
                 showMessage("Error recording match.", 'error');
+            }
+        }
+
+        // New function to confirm undo action
+        function confirmUndoLastMatch() {
+            if (!lastMatchData) {
+                showModal("No last match to undo.");
+                return;
+            }
+
+            const content = `
+                <div class="text-center">
+                    <p class="mb-4">Are you sure you want to undo the last recorded match? This action cannot be undone.</p>
+                    <div class="flex justify-center space-x-4">
+                        <button id="confirm-undo-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Yes, Undo</button>
+                        <button id="cancel-undo-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
+                    </div>
+                </div>
+            `;
+            showModal(content, false);
+
+            document.getElementById('confirm-undo-btn').addEventListener('click', async () => {
+                closeModal(); // Close the confirmation modal
+                await handleUndoLastMatch(); // Proceed with undo
+            });
+            document.getElementById('cancel-undo-btn').addEventListener('click', closeModal);
+        }
+
+        async function handleUndoLastMatch() {
+            // This function now assumes confirmation has already been given
+            if (!lastMatchData) {
+                // This case should ideally not be hit if confirmUndoLastMatch is called first
+                showMessage("No last match data available to undo.", 'error');
+                return;
+            }
+
+            const { whitePlayerId, blackPlayerId, rankHistoryDocId, originalWhitePlayerStats, originalBlackPlayerStats, didRankSwap } = lastMatchData;
+
+            try {
+                const batch = writeBatch(db);
+
+                // Revert player stats to their original state before the match
+                const whitePlayerRef = doc(db, playersCollectionPath, whitePlayerId);
+                const blackPlayerRef = doc(db, playersCollectionPath, blackPlayerId);
+                
+                batch.update(whitePlayerRef, originalWhitePlayerStats);
+                batch.update(blackPlayerRef, originalBlackPlayerStats);
+
+                // Delete the rank history entry for this match
+                batch.delete(doc(db, rankHistoryCollectionPath, rankHistoryDocId));
+
+                await batch.commit();
+
+                // Clear last match data and disable undo button
+                lastMatchData = null;
+                undoMatchBtn.disabled = true;
+
+                showMessage("Last match successfully undone!", 'success');
+            } catch (error) {
+                console.error("Error undoing last match:", error);
+                showMessage("Error undoing last match.", 'error');
             }
         }
 
