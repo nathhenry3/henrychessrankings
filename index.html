@@ -6,9 +6,6 @@
     <title>Henry Chess Rankings</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js for plotting -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -97,26 +94,6 @@
                 </div>
             </div>
 
-            <!-- Rank History Chart -->
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
-                <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Rank History</h2>
-                <div id="player-filter-container" class="mb-4"></div>
-                <div class="flex flex-col sm:flex-row gap-4 mb-4">
-                    <div class="flex-1">
-                        <label for="start-date" class="block text-sm font-medium text-gray-300 mb-1">Start Date:</label>
-                        <input type="date" id="start-date" class="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
-                    </div>
-                    <div class="flex-1">
-                        <label for="end-date" class="block text-sm font-medium text-gray-300 mb-1">End Date:</label>
-                        <input type="date" id="end-date" class="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
-                    </div>
-                </div>
-                <div id="chart-container" style="height: 500px;">
-                    <canvas id="rank-history-chart"></canvas>
-                    <p id="chart-placeholder" class="text-center text-gray-400">No match history yet. Record some matches to see the graph!</p>
-                </div>
-            </div>
-
             <!-- Ranking Rules -->
             <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 mt-8">
                 <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Ranking Rules</h2>
@@ -142,19 +119,15 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        // If you need analytics, import it here:
-        // import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
 
         // --- GLOBAL STATE AND CONFIG ---
         let db, auth, userId;
         let players = [];
-        let rankHistory = [];
-        let rankChart = null; // To hold the Chart.js instance
-        let selectedPlayersForChart = [];
+        // rankHistory and related chart variables are no longer needed
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
-        const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`;
+        const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`; // Still needed for historical data updates
 
         // --- UI ELEMENT REFERENCES ---
         const loadingEl = document.getElementById('loading');
@@ -172,21 +145,13 @@
             // This is the placeholder configuration that will be used if __firebase_config is not defined.
             // It should be replaced with your actual Firebase config if you run this outside the Canvas.
             const firebaseConfigPlaceholder = {
-
 			  apiKey: "AIzaSyD6mh__50PPV-WTMVitcl3iEyArgw6HpmI",
-
 			  authDomain: "henry-chess-rankings.firebaseapp.com",
-
 			  projectId: "henry-chess-rankings",
-
 			  storageBucket: "henry-chess-rankings.firebasestorage.app",
-
 			  messagingSenderId: "572969866716",
-
 			  appId: "1:572969866716:web:93d811059e3b74af2ceb19",
-
 			  measurementId: "G-ZBTZ062688"
-
 			};
 
             // This is the correct and only declaration of firebaseConfig
@@ -208,8 +173,6 @@
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-                // If you need analytics, uncomment and initialize here:
-                // const analytics = getAnalytics(app);
 
                 // Listen for authentication state changes
                 onAuthStateChanged(auth, async (user) => {
@@ -242,7 +205,6 @@
             mainContentEl.style.display = 'block';
             setupEventListeners();
             listenForPlayerUpdates();
-            listenForRankHistoryUpdates();
             // Display the user ID for debugging/multi-user identification
             const userIdDisplay = document.createElement('p');
             userIdDisplay.className = 'text-center text-sm text-gray-400 mt-4';
@@ -258,28 +220,9 @@
                 players.sort((a, b) => a.rank - b.rank);
                 renderLeaderboard();
                 updatePlayerDropdowns();
-                renderPlayerFilterButtons();
-                renderRankHistoryChart();
             }, (error) => {
                 console.error("Error fetching players:", error);
                 showMessage("Error loading players.", 'error');
-            });
-        }
-
-        function listenForRankHistoryUpdates() {
-            const rankHistoryQuery = query(collection(db, rankHistoryCollectionPath));
-            onSnapshot(rankHistoryQuery, (snapshot) => {
-                rankHistory = snapshot.docs.map(doc => {
-                    const data = doc.data();
-                    // Ensure timestamp is a Date object
-                    data.timestamp = data.timestamp.toDate ? data.timestamp.toDate() : new Date(data.timestamp);
-                    return { id: doc.id, ...data };
-                });
-                rankHistory.sort((a, b) => a.timestamp - b.timestamp);
-                renderRankHistoryChart();
-            }, (error) => {
-                console.error("Error fetching rank history:", error);
-                showMessage("Error loading rank history.", 'error');
             });
         }
 
@@ -368,157 +311,6 @@
             winnerSelect.innerHTML = options;
         }
 
-        function renderPlayerFilterButtons() {
-            const container = document.getElementById('player-filter-container');
-            const allPlayerNames = players.map(p => p.name);
-            if (allPlayerNames.length === 0) {
-                container.innerHTML = '';
-                return;
-            }
-
-            let buttonsHTML = `<label class="block text-sm font-medium text-gray-300 mb-2">Filter Players:</label>
-                               <div class="flex flex-wrap gap-2">`;
-            allPlayerNames.forEach(name => {
-                const isSelected = selectedPlayersForChart.includes(name);
-                buttonsHTML += `<button data-player-name="${name}" class="player-filter-btn px-3 py-1 rounded-full text-sm font-semibold transition duration-200 ease-in-out ${isSelected ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}">${name}</button>`;
-            });
-
-            if (selectedPlayersForChart.length > 0) {
-                buttonsHTML += `<button id="clear-player-filter-btn" class="px-3 py-1 rounded-full text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition duration-200 ease-in-out">Clear Filter</button>`;
-            }
-            buttonsHTML += `</div>`;
-            container.innerHTML = buttonsHTML;
-        }
-
-        function renderRankHistoryChart() {
-            const canvas = document.getElementById('rank-history-chart');
-            const placeholder = document.getElementById('chart-placeholder');
-            const ctx = canvas.getContext('2d');
-
-            const startDate = document.getElementById('start-date').value;
-            const endDate = document.getElementById('end-date').value;
-
-            let filteredHistory = rankHistory;
-            if (startDate) {
-                const startOfDay = new Date(startDate);
-                startOfDay.setHours(0, 0, 0, 0);
-                filteredHistory = filteredHistory.filter(snapshot => snapshot.timestamp.getTime() >= startOfDay.getTime());
-            }
-            if (endDate) {
-                const endOfDay = new Date(endDate);
-                endOfDay.setHours(23, 59, 59, 999);
-                filteredHistory = filteredHistory.filter(snapshot => snapshot.timestamp.getTime() <= endOfDay.getTime());
-            }
-
-            if (filteredHistory.length === 0) {
-                canvas.style.display = 'none';
-                placeholder.style.display = 'block';
-                if(rankChart) rankChart.destroy();
-                return;
-            }
-            
-            canvas.style.display = 'block';
-            placeholder.style.display = 'none';
-
-            const chartData = filteredHistory.map(snapshot => {
-                const dataPoint = { x: snapshot.timestamp };
-                snapshot.rankings.forEach(ranking => {
-                    dataPoint[ranking.playerName] = ranking.rank;
-                });
-                return dataPoint;
-            });
-
-            const allPlayerNames = players.map(p => p.name);
-            const playersToDisplay = selectedPlayersForChart.length > 0 ? selectedPlayersForChart : allPlayerNames;
-
-            const datasets = playersToDisplay.map((name, index) => {
-                const color = `hsl(${index * 137 % 360}, 70%, 60%)`;
-                return {
-                    label: name,
-                    data: chartData.map(d => ({ x: d.x, y: d[name] })).filter(p => p.y !== undefined), // Filter out points where player didn't exist
-                    borderColor: color,
-                    backgroundColor: color,
-                    tension: 0.1,
-                    spanGaps: true, // Connect lines across gaps
-                };
-            });
-            
-            const maxRank = players.length > 0 ? Math.max(...players.map(p => p.rank)) : 1;
-
-            if (rankChart) {
-                rankChart.destroy();
-            }
-
-            rankChart = new Chart(ctx, {
-                type: 'line',
-                data: { datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'day',
-                                // FIX: Add minUnit to ensure ticks are drawn at least at this interval
-                                minUnit: 'day', 
-                                tooltipFormat: 'PPpp', // date-fns format
-                                displayFormats: {
-                                    day: 'MMM d, yyyy'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Date',
-                                color: '#cbd5e0'
-                            },
-                            grid: { color: '#4a5568' },
-                            ticks: {
-                                color: '#cbd5e0',
-                                source: 'auto',
-                                major: {
-                                    enabled: true
-                                },
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Rank',
-                                color: '#cbd5e0'
-                            },
-                            reverse: true,
-                            min: 1,
-                            max: maxRank + 1,
-                            grid: { color: '#4a5568' },
-                            ticks: { 
-                                color: '#cbd5e0',
-                                stepSize: 1
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            labels: {
-                                color: '#cbd5e0'
-                            }
-                        },
-                        tooltip: {
-                            backgroundColor: '#2d3748',
-                            titleColor: '#a0aec0',
-                            bodyColor: '#e2e8f0',
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.dataset.label}: Rank ${context.parsed.y}`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-
         // --- EVENT HANDLERS & LOGIC ---
         function setupEventListeners() {
             // Forms
@@ -543,26 +335,6 @@
 
             // Search
             searchPlayerInput.addEventListener('input', renderLeaderboard);
-
-            // Chart Filters
-            document.getElementById('player-filter-container').addEventListener('click', (e) => {
-                if (e.target.classList.contains('player-filter-btn')) {
-                    const playerName = e.target.dataset.playerName;
-                    if (selectedPlayersForChart.includes(playerName)) {
-                        selectedPlayersForChart = selectedPlayersForChart.filter(name => name !== playerName);
-                    } else {
-                        selectedPlayersForChart.push(playerName);
-                    }
-                    renderPlayerFilterButtons();
-                    renderRankHistoryChart();
-                } else if (e.target.id === 'clear-player-filter-btn') {
-                    selectedPlayersForChart = [];
-                    renderPlayerFilterButtons();
-                    renderRankHistoryChart();
-                }
-            });
-            document.getElementById('start-date').addEventListener('change', renderRankHistoryChart);
-            document.getElementById('end-date').addEventListener('change', renderRankHistoryChart);
         }
 
         async function handleAddPlayer(e) {
@@ -599,7 +371,7 @@
 
                 await batch.commit();
 
-                // Record rank history after adding player
+                // Record rank history after adding player (still needed for data integrity, even if not displayed)
                 const updatedPlayersSnapshot = await getDocs(query(collection(db, playersCollectionPath)));
                 const updatedPlayers = updatedPlayersSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
                 const currentRankings = updatedPlayers.map(p => ({ playerId: p.id, playerName: p.name, rank: p.rank }));
@@ -636,7 +408,7 @@
                 e.preventDefault();
                 const newName = document.getElementById('edit-player-name-input').value.trim();
                 if (!newName) {
-                    showModal("Player name cannot be empty."); // Changed from alert to showModal
+                    showModal("Player name cannot be empty.");
                     return;
                 }
                 try {
@@ -669,12 +441,32 @@
 
             document.getElementById('confirm-remove-btn').addEventListener('click', async () => {
                 try {
-                    await deleteDoc(doc(db, playersCollectionPath, playerId));
-                    showMessage(`${player.name} removed successfully!`, 'success');
+                    const batch = writeBatch(db);
+
+                    // 1. Delete the player document
+                    batch.delete(doc(db, playersCollectionPath, playerId));
+
+                    // 2. Remove player's rank entries from all rank history snapshots
+                    const rankHistorySnapshot = await getDocs(collection(db, rankHistoryCollectionPath));
+                    rankHistorySnapshot.docs.forEach(historyDoc => {
+                        const currentRankings = historyDoc.data().rankings;
+                        const updatedRankings = currentRankings.filter(ranking => ranking.playerId !== playerId);
+
+                        if (updatedRankings.length === 0) {
+                            // If the snapshot becomes empty, delete the history document
+                            batch.delete(doc(db, rankHistoryCollectionPath, historyDoc.id));
+                        } else {
+                            // Otherwise, update the history document with filtered rankings
+                            batch.update(doc(db, rankHistoryCollectionPath, historyDoc.id), { rankings: updatedRankings });
+                        }
+                    });
+
+                    await batch.commit();
+                    showMessage(`${player.name} and all associated history removed successfully!`, 'success');
                     closeModal();
                 } catch (error) {
-                    console.error("Error removing player:", error);
-                    showMessage(`Error removing ${player.name}.`, 'error');
+                    console.error("Error removing player and history:", error);
+                    showMessage(`Error removing ${player.name} and history.`, 'error');
                     closeModal();
                 }
             });
@@ -783,7 +575,7 @@
                 batch.update(blackPlayerRef, blackData);
                 await batch.commit();
 
-                // Record rank history snapshot
+                // Record rank history snapshot (still needed for data integrity, even if not displayed)
                 const currentPlayers = players.map(p => {
                     if (p.id === whitePlayerId) return { ...p, ...whiteData };
                     if (p.id === blackPlayerId) return { ...p, ...blackData };
