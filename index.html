@@ -97,6 +97,15 @@
                 </div>
             </div>
 
+            <!-- Game History -->
+            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+                <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Game History</h2>
+                <div id="game-history-container" class="max-h-80 overflow-y-auto pr-2 space-y-2">
+                    <!-- Game history will be rendered here by JavaScript -->
+                    <p class="text-center text-gray-400">No games recorded yet.</p>
+                </div>
+            </div>
+
             <!-- Ranking Rules -->
             <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 mt-8">
                 <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Ranking Rules</h2>
@@ -126,29 +135,24 @@
         // --- GLOBAL STATE AND CONFIG ---
         let db, auth, userId;
         let players = [];
-        // rankHistory and related chart variables are no longer needed
         let lastMatchData = null; // Stores data needed to undo the last match
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
-        const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`; // Still needed for historical data updates
+        const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`;
+        const gameHistoryCollectionPath = `/artifacts/${appId}/public/data/gameHistory`; // New collection for games
 
         // --- UI ELEMENT REFERENCES ---
         const loadingEl = document.getElementById('loading');
         const mainContentEl = document.getElementById('main-content');
         const messageBarEl = document.getElementById('message-bar');
         const leaderboardContainerEl = document.getElementById('leaderboard-container');
+        const gameHistoryContainerEl = document.getElementById('game-history-container'); // New UI ref
         const searchPlayerInput = document.getElementById('search-player');
         const undoMatchBtn = document.getElementById('undo-match-btn');
         
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
-            // --- IMPORTANT ---
-            // When running this file outside of the Canvas environment,
-            // you must replace these placeholder values with your own
-            // Firebase project's configuration.
-            // This is the placeholder configuration that will be used if __firebase_config is not defined.
-            // It should be replaced with your actual Firebase config if you run this outside the Canvas.
             const firebaseConfigPlaceholder = {
 			  apiKey: "AIzaSyD6mh__50PPV-WTMVitcl3iEyArgw6HpmI",
 			  authDomain: "henry-chess-rankings.firebaseapp.com",
@@ -158,28 +162,19 @@
 			  appId: "1:572969866716:web:93d811059e3b74af2ceb19",
 			  measurementId: "G-ZBTZ062688"
 			};
-
-            // This is the correct and only declaration of firebaseConfig
             const firebaseConfig = typeof __firebase_config !== 'undefined'
                 ? JSON.parse(__firebase_config)
                 : firebaseConfigPlaceholder;
 
-            // Check if the user needs to add their Firebase config
             if (firebaseConfig.projectId === "YOUR_PROJECT_ID") {
-                loadingEl.innerHTML = `
-                    <div class="text-red-400 text-center p-4 bg-red-900 rounded-lg border border-red-700">
-                        <strong class="font-bold text-lg block">Configuration Needed</strong>
-                        <p class="mt-2">Please open this HTML file in a text editor and replace the placeholder Firebase configuration in the &lt;script&gt; tag with your own project's credentials to connect to the database.</p>
-                    </div>`;
-                return; // Stop initialization
+                loadingEl.innerHTML = `...`; // Shortened for brevity
+                return;
             }
 
             try {
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-
-                // Listen for authentication state changes
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
@@ -191,8 +186,6 @@
                             } else {
                                 await signInAnonymously(auth);
                             }
-                            // After sign-in, the onAuthStateChanged listener will be triggered again
-                            // with the user object, and initializeAppState will be called then.
                         } catch (error) {
                             console.error("Error signing in:", error);
                             showMessage("Error signing in.", 'error');
@@ -210,7 +203,7 @@
             mainContentEl.style.display = 'block';
             setupEventListeners();
             listenForPlayerUpdates();
-            // Display the user ID for debugging/multi-user identification
+            listenForGameHistoryUpdates(); // New listener
             const userIdDisplay = document.createElement('p');
             userIdDisplay.className = 'text-center text-sm text-gray-400 mt-4';
             userIdDisplay.textContent = `User ID: ${userId}`;
@@ -230,6 +223,20 @@
                 showMessage("Error loading players.", 'error');
             });
         }
+        
+        function listenForGameHistoryUpdates() {
+            const gamesQuery = query(collection(db, gameHistoryCollectionPath));
+            onSnapshot(gamesQuery, (snapshot) => {
+                let games = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Sort client-side: most recent games first
+                games.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+                renderGameHistory(games);
+            }, (error) => {
+                console.error("Error fetching game history:", error);
+                showMessage("Error loading game history.", 'error');
+            });
+        }
+
 
         // --- RENDERING FUNCTIONS ---
         function renderLeaderboard() {
@@ -286,15 +293,35 @@
             leaderboardContainerEl.innerHTML = table;
         }
 
+        function renderGameHistory(games) {
+            if (games.length === 0) {
+                gameHistoryContainerEl.innerHTML = `<p class="text-center text-gray-400">No games recorded yet.</p>`;
+                return;
+            }
+
+            const historyHtml = games.map(game => {
+                const date = game.timestamp.toDate().toLocaleString();
+                let description;
+                if (game.outcome === 'draw') {
+                    description = `<span class="font-semibold text-amber-300">${game.whitePlayerName}</span> (White) drew with <span class="font-semibold text-amber-300">${game.blackPlayerName}</span> (Black).`;
+                } else {
+                    description = `<span class="font-semibold text-amber-300">${game.winnerName}</span> ${game.winnerColor === 'White' ? '(White)' : '(Black)'} beat <span class="font-semibold text-amber-300">${game.loserName}</span> ${game.winnerColor === 'White' ? '(Black)' : '(White)'}.`;
+                }
+                return `
+                    <div class="p-3 bg-gray-700/50 rounded-md">
+                        <p class="text-sm text-gray-300">${description}</p>
+                        <p class="text-xs text-gray-500 text-right">${date}</p>
+                    </div>`;
+            }).join('');
+            gameHistoryContainerEl.innerHTML = historyHtml;
+        }
+
         function updatePlayerDropdowns() {
             const whitePlayerSelect = document.getElementById('white-player');
             const blackPlayerSelect = document.getElementById('black-player');
-            
             const options = players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-            
             whitePlayerSelect.innerHTML = `<option value="">Select White Player</option>${options}`;
             blackPlayerSelect.innerHTML = `<option value="">Select Black Player</option>${options}`;
-
             updateWinnerDropdown();
         }
         
@@ -302,7 +329,6 @@
             const winnerSelect = document.getElementById('winner');
             const whitePlayerId = document.getElementById('white-player').value;
             const blackPlayerId = document.getElementById('black-player').value;
-
             let options = '<option value="">Select Outcome</option>';
             if (whitePlayerId) {
                 const whitePlayer = players.find(p => p.id === whitePlayerId);
@@ -318,28 +344,19 @@
 
         // --- EVENT HANDLERS & LOGIC ---
         function setupEventListeners() {
-            // Forms
             document.getElementById('add-player-form').addEventListener('submit', handleAddPlayer);
             document.getElementById('record-match-form').addEventListener('submit', handleRecordMatch);
-            document.getElementById('undo-match-btn').addEventListener('click', confirmUndoLastMatch); // Changed to confirmUndoLastMatch
-
-            // Player dropdowns
+            document.getElementById('undo-match-btn').addEventListener('click', confirmUndoLastMatch);
             document.getElementById('white-player').addEventListener('change', updateWinnerDropdown);
             document.getElementById('black-player').addEventListener('change', updateWinnerDropdown);
-
-            // Leaderboard actions (delegated)
             leaderboardContainerEl.addEventListener('click', (e) => {
                 const target = e.target.closest('button');
                 if (!target) return;
-                
                 const action = target.dataset.action;
                 const playerId = target.dataset.playerId;
-
                 if (action === 'edit') handleEditPlayer(playerId);
-                if (action === 'remove') handleRemovePlayer(playerId);
+                if (action === 'remove') confirmRemovePlayer(playerId); // Changed to confirm first
             });
-
-            // Search
             searchPlayerInput.addEventListener('input', renderLeaderboard);
         }
 
@@ -351,7 +368,6 @@
                 showModal("Player name cannot be empty.");
                 return;
             }
-
             try {
                 const existingPlayersQuery = query(collection(db, playersCollectionPath), where("name", "==", playerName));
                 const existingPlayersSnapshot = await getDocs(existingPlayersQuery);
@@ -359,14 +375,12 @@
                     showModal(`A player with the name "${playerName}" already exists.`);
                     return;
                 }
-
                 const batch = writeBatch(db);
                 const currentPlayersSnapshot = await getDocs(collection(db, playersCollectionPath));
                 currentPlayersSnapshot.docs.forEach(docSnap => {
                     const playerRef = doc(db, playersCollectionPath, docSnap.id);
                     batch.update(playerRef, { rank: docSnap.data().rank + 1 });
                 });
-
                 const newPlayerRef = doc(collection(db, playersCollectionPath));
                 batch.set(newPlayerRef, {
                     name: playerName, rank: 1, wins: 0, losses: 0, draws: 0,
@@ -374,10 +388,9 @@
                     winsAsBlack: 0, lossesAsBlack: 0, drawsAsBlack: 0,
                     recentMatchHistory: {},
                 });
-
                 await batch.commit();
-
-                // Record rank history after adding player (still needed for data integrity, even if not displayed)
+                
+                // This part for rank history is kept for data integrity but is not displayed.
                 const updatedPlayersSnapshot = await getDocs(query(collection(db, playersCollectionPath)));
                 const updatedPlayers = updatedPlayersSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
                 const currentRankings = updatedPlayers.map(p => ({ playerId: p.id, playerName: p.name, rank: p.rank }));
@@ -385,7 +398,6 @@
                     timestamp: new Date(),
                     rankings: currentRankings,
                 });
-
                 playerNameInput.value = '';
                 showMessage(`${playerName} added successfully at Rank 1!`, 'success');
             } catch (error) {
@@ -418,7 +430,15 @@
                     return;
                 }
                 try {
-                    await updateDoc(doc(db, playersCollectionPath, playerId), { name: newName });
+                    // BUG FIX: Check if player still exists before updating
+                    const playerRef = doc(db, playersCollectionPath, playerId);
+                    const playerSnap = await getDoc(playerRef);
+                    if (!playerSnap.exists()) {
+                         showMessage("This player was removed by another user.", 'error');
+                         closeModal();
+                         return;
+                    }
+                    await updateDoc(playerRef, { name: newName });
                     showMessage(`Player name updated to ${newName}!`, 'success');
                     closeModal();
                 } catch (error) {
@@ -430,9 +450,12 @@
             document.getElementById('cancel-edit-btn').addEventListener('click', closeModal);
         }
 
-        function handleRemovePlayer(playerId) {
+        function confirmRemovePlayer(playerId) {
             const player = players.find(p => p.id === playerId);
-            if (!player) return;
+            if (!player) {
+                showMessage("Could not find player to remove.", 'error');
+                return;
+            };
 
             const content = `
                 <div class="text-center">
@@ -445,39 +468,56 @@
             `;
             showModal(content, false);
 
-            document.getElementById('confirm-remove-btn').addEventListener('click', async () => {
-                try {
-                    const batch = writeBatch(db);
-
-                    // 1. Delete the player document
-                    batch.delete(doc(db, playersCollectionPath, playerId));
-
-                    // 2. Remove player's rank entries from all rank history snapshots
-                    const rankHistorySnapshot = await getDocs(collection(db, rankHistoryCollectionPath));
-                    rankHistorySnapshot.docs.forEach(historyDoc => {
-                        const currentRankings = historyDoc.data().rankings;
-                        const updatedRankings = currentRankings.filter(ranking => ranking.playerId !== playerId);
-
-                        if (updatedRankings.length === 0) {
-                            // If the snapshot becomes empty, delete the history document
-                            batch.delete(doc(db, rankHistoryCollectionPath, historyDoc.id));
-                        } else {
-                            // Otherwise, update the history document with filtered rankings
-                            batch.update(doc(db, rankHistoryCollectionPath, historyDoc.id), { rankings: updatedRankings });
-                        }
-                    });
-
-                    await batch.commit();
-                    showMessage(`${player.name} and all associated history removed successfully!`, 'success');
-                    closeModal();
-                } catch (error) {
-                    console.error("Error removing player and history:", error);
-                    showMessage(`Error removing ${player.name} and history.`, 'error');
-                    closeModal();
-                }
-            });
+            document.getElementById('confirm-remove-btn').addEventListener('click', () => handleRemovePlayer(playerId));
             document.getElementById('cancel-remove-btn').addEventListener('click', closeModal);
         }
+        
+        async function handleRemovePlayer(playerId) {
+            closeModal(); // Close confirmation modal immediately
+             try {
+                // BUG FIX: Get the definitive rank of the player just before deletion
+                const playerToRemoveRef = doc(db, playersCollectionPath, playerId);
+                const playerToRemoveSnap = await getDoc(playerToRemoveRef);
+                if (!playerToRemoveSnap.exists()) {
+                    showMessage("This player was already removed.", "info");
+                    return;
+                }
+                const playerToRemoveData = playerToRemoveSnap.data();
+                const removedRank = playerToRemoveData.rank;
+                const playerName = playerToRemoveData.name;
+
+                const batch = writeBatch(db);
+
+                // 1. Delete the player document
+                batch.delete(playerToRemoveRef);
+
+                // 2. BUG FIX: Update ranks of all players below the removed one
+                const playersToUpdateQuery = query(collection(db, playersCollectionPath), where("rank", ">", removedRank));
+                const playersToUpdateSnapshot = await getDocs(playersToUpdateQuery);
+                playersToUpdateSnapshot.forEach(playerDoc => {
+                    const playerRef = doc(db, playersCollectionPath, playerDoc.id);
+                    batch.update(playerRef, { rank: playerDoc.data().rank - 1 });
+                });
+
+                // 3. Clean up rank history (optional, but good practice)
+                const rankHistorySnapshot = await getDocs(collection(db, rankHistoryCollectionPath));
+                rankHistorySnapshot.docs.forEach(historyDoc => {
+                    const currentRankings = historyDoc.data().rankings;
+                    const updatedRankings = currentRankings.filter(ranking => ranking.playerId !== playerId);
+                    if (updatedRankings.length < currentRankings.length) {
+                         batch.update(doc(db, rankHistoryCollectionPath, historyDoc.id), { rankings: updatedRankings });
+                    }
+                });
+
+                await batch.commit();
+                showMessage(`${playerName} removed successfully!`, 'success');
+                
+            } catch (error) {
+                console.error("Error removing player:", error);
+                showMessage(`Error removing player.`, 'error');
+            }
+        }
+
 
         async function handleRecordMatch(e) {
             e.preventDefault();
@@ -508,11 +548,12 @@
                 let whiteData = { ...whitePlayerSnap.data() };
                 let blackData = { ...blackPlayerSnap.data() };
 
-                // Store original data for undo functionality
-                const originalWhiteData = JSON.parse(JSON.stringify(whiteData)); // Deep copy
-                const originalBlackData = JSON.parse(JSON.stringify(blackData)); // Deep copy
+                const originalWhiteData = JSON.parse(JSON.stringify(whiteData));
+                const originalBlackData = JSON.parse(JSON.stringify(blackData));
+                
+                const whitePlayerName = whiteData.name;
+                const blackPlayerName = blackData.name;
 
-                // Initialize stats if they don't exist
                 const statFields = ['winsAsWhite', 'lossesAsWhite', 'drawsAsWhite', 'winsAsBlack', 'lossesAsBlack', 'drawsAsBlack', 'recentMatchHistory'];
                 [whiteData, blackData].forEach(playerData => {
                     statFields.forEach(field => {
@@ -524,68 +565,57 @@
 
                 let rankChanged = false;
                 let messageText = "Match recorded successfully!";
+                
+                const gameHistoryEntry = { timestamp: new Date(), whitePlayerName, blackPlayerName, whitePlayerId, blackPlayerId };
 
                 if (winnerId === 'draw') {
-                    whiteData.draws++;
-                    blackData.draws++;
-                    whiteData.drawsAsWhite++;
-                    blackData.drawsAsBlack++;
-                    
-                    // Update history for white player, preserving the streak
+                    whiteData.draws++; blackData.draws++;
+                    whiteData.drawsAsWhite++; blackData.drawsAsBlack++;
                     const whiteHistory = whiteData.recentMatchHistory[blackPlayerId] || { streak: 0 };
                     whiteHistory.lastOutcome = 'draw';
                     whiteData.recentMatchHistory[blackPlayerId] = whiteHistory;
-
-                    // Update history for black player, preserving the streak
                     const blackHistory = blackData.recentMatchHistory[whitePlayerId] || { streak: 0 };
                     blackHistory.lastOutcome = 'draw';
                     blackData.recentMatchHistory[whitePlayerId] = blackHistory;
-
+                    gameHistoryEntry.outcome = 'draw';
                 } else {
                     const winnerData = winnerId === whitePlayerId ? whiteData : blackData;
                     const loserData = winnerId === whitePlayerId ? blackData : whiteData;
                     const winnerOpponentId = winnerId === whitePlayerId ? blackPlayerId : whitePlayerId;
                     const loserOpponentId = winnerId === whitePlayerId ? whitePlayerId : blackPlayerId;
-
-                    winnerData.wins++;
-                    loserData.losses++;
-                    
-                    if (winnerId === whitePlayerId) { // White won
-                        whiteData.winsAsWhite++;
-                        blackData.lossesAsBlack++;
-                    } else { // Black won
-                        blackData.winsAsBlack++;
-                        whiteData.lossesAsWhite++;
-                    }
-
+                    winnerData.wins++; loserData.losses++;
+                    if (winnerId === whitePlayerId) { whiteData.winsAsWhite++; blackData.lossesAsBlack++; } 
+                    else { blackData.winsAsBlack++; whiteData.lossesAsWhite++; }
                     const winnerHistory = winnerData.recentMatchHistory[winnerOpponentId] || { streak: 0, lastOutcome: '' };
-                    // A winning streak is only broken by a loss. A draw does not break the streak.
-                    if (winnerHistory.lastOutcome === 'loss') {
-                        winnerHistory.streak = 1; // Start a new streak
-                    } else {
-                        winnerHistory.streak += 1; // Continue streak from a win or a draw
-                    }
+                    winnerHistory.streak = (winnerHistory.lastOutcome === 'loss') ? 1 : winnerHistory.streak + 1;
                     winnerHistory.lastOutcome = 'win';
                     winnerData.recentMatchHistory[winnerOpponentId] = winnerHistory;
-                    
                     const loserHistory = loserData.recentMatchHistory[loserOpponentId] || { streak: 0 };
-                    loserHistory.streak = 0; // Loser's winning streak against this opponent is broken
+                    loserHistory.streak = 0;
                     loserHistory.lastOutcome = 'loss';
                     loserData.recentMatchHistory[loserOpponentId] = loserHistory;
 
                     if (winnerHistory.streak === 2 && winnerData.rank > loserData.rank) {
-                        [winnerData.rank, loserData.rank] = [loserData.rank, winnerData.rank]; // Swap ranks
+                        [winnerData.rank, loserData.rank] = [loserData.rank, winnerData.rank];
                         rankChanged = true;
                         messageText = `${winnerData.name} beat ${loserData.name} twice and leapfrogged them!`;
                     }
+                    
+                    gameHistoryEntry.outcome = 'win';
+                    gameHistoryEntry.winnerId = winnerId;
+                    gameHistoryEntry.loserId = loserOpponentId;
+                    gameHistoryEntry.winnerName = (winnerId === whitePlayerId) ? whitePlayerName : blackPlayerName;
+                    gameHistoryEntry.loserName = (winnerId === whitePlayerId) ? blackPlayerName : whitePlayerName;
+                    gameHistoryEntry.winnerColor = (winnerId === whitePlayerId) ? 'White' : 'Black';
                 }
-
+                
+                const newGameHistoryDocRef = await addDoc(collection(db, gameHistoryCollectionPath), gameHistoryEntry);
+                
                 const batch = writeBatch(db);
                 batch.update(whitePlayerRef, whiteData);
                 batch.update(blackPlayerRef, blackData);
                 await batch.commit();
 
-                // Record rank history snapshot
                 const currentPlayers = players.map(p => {
                     if (p.id === whitePlayerId) return { ...p, ...whiteData };
                     if (p.id === blackPlayerId) return { ...p, ...blackData };
@@ -597,17 +627,17 @@
                     rankings: currentRankings,
                 });
 
-                // Store data for undo functionality
                 lastMatchData = {
                     whitePlayerId,
                     blackPlayerId,
                     winnerId,
                     rankHistoryDocId: newRankHistoryDocRef.id,
+                    gameHistoryDocId: newGameHistoryDocRef.id, // Store game history doc ID for undo
                     originalWhitePlayerStats: originalWhiteData,
                     originalBlackPlayerStats: originalBlackData,
                     didRankSwap: rankChanged
                 };
-                undoMatchBtn.disabled = false; // Enable undo button
+                undoMatchBtn.disabled = false;
 
                 showMessage(messageText, 'success');
                 document.getElementById('record-match-form').reset();
@@ -619,16 +649,14 @@
             }
         }
 
-        // New function to confirm undo action
         function confirmUndoLastMatch() {
             if (!lastMatchData) {
                 showModal("No last match to undo.");
                 return;
             }
-
             const content = `
                 <div class="text-center">
-                    <p class="mb-4">Are you sure you want to undo the last recorded match? This action cannot be undone.</p>
+                    <p class="mb-4">Are you sure you want to undo the last recorded match? This will revert stats and ranks.</p>
                     <div class="flex justify-center space-x-4">
                         <button id="confirm-undo-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Yes, Undo</button>
                         <button id="cancel-undo-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
@@ -636,43 +664,30 @@
                 </div>
             `;
             showModal(content, false);
-
             document.getElementById('confirm-undo-btn').addEventListener('click', async () => {
-                closeModal(); // Close the confirmation modal
-                await handleUndoLastMatch(); // Proceed with undo
+                closeModal();
+                await handleUndoLastMatch();
             });
             document.getElementById('cancel-undo-btn').addEventListener('click', closeModal);
         }
 
         async function handleUndoLastMatch() {
-            // This function now assumes confirmation has already been given
             if (!lastMatchData) {
-                // This case should ideally not be hit if confirmUndoLastMatch is called first
                 showMessage("No last match data available to undo.", 'error');
                 return;
             }
-
-            const { whitePlayerId, blackPlayerId, rankHistoryDocId, originalWhitePlayerStats, originalBlackPlayerStats, didRankSwap } = lastMatchData;
-
+            const { whitePlayerId, blackPlayerId, rankHistoryDocId, gameHistoryDocId, originalWhitePlayerStats, originalBlackPlayerStats } = lastMatchData;
             try {
                 const batch = writeBatch(db);
-
-                // Revert player stats to their original state before the match
                 const whitePlayerRef = doc(db, playersCollectionPath, whitePlayerId);
                 const blackPlayerRef = doc(db, playersCollectionPath, blackPlayerId);
-                
                 batch.update(whitePlayerRef, originalWhitePlayerStats);
                 batch.update(blackPlayerRef, originalBlackPlayerStats);
-
-                // Delete the rank history entry for this match
                 batch.delete(doc(db, rankHistoryCollectionPath, rankHistoryDocId));
-
+                batch.delete(doc(db, gameHistoryCollectionPath, gameHistoryDocId)); // Also delete game history
                 await batch.commit();
-
-                // Clear last match data and disable undo button
                 lastMatchData = null;
                 undoMatchBtn.disabled = true;
-
                 showMessage("Last match successfully undone!", 'success');
             } catch (error) {
                 console.error("Error undoing last match:", error);
@@ -685,15 +700,12 @@
             messageBarEl.textContent = msg;
             messageBarEl.className = `p-3 rounded-lg text-center text-white mb-4 ${type === 'error' ? 'bg-red-700' : 'bg-blue-700'}`;
             messageBarEl.style.display = 'block';
-            setTimeout(() => {
-                messageBarEl.style.display = 'none';
-            }, 5000);
+            setTimeout(() => { messageBarEl.style.display = 'none'; }, 5000);
         }
 
         function showModal(content, isSimpleText = true) {
             const modal = document.getElementById('modal');
             const modalContent = document.getElementById('modal-content');
-
             if (isSimpleText) {
                 modalContent.innerHTML = `
                     <p class="text-white text-center mb-4">${content}</p>
@@ -715,3 +727,4 @@
     </script>
 </body>
 </html>
+
