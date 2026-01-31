@@ -41,7 +41,7 @@
         <div id="loading" class="text-center text-lg p-4">Loading Firebase...</div>
         
         <!-- Main Content (hidden until Firebase is ready) -->
-        <main id="main-content" class="hidden max-w-6xl mx-auto space-y-8">
+        <main id="main-content" class="hidden max-w-5xl mx-auto space-y-8">
             
             <!-- Message Bar -->
             <div id="message-bar" class="p-3 rounded-lg text-center text-white mb-4 hidden"></div>
@@ -81,8 +81,9 @@
                     </div>
                     <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Record Match</button>
                 </form>
-                <div class="mt-4 text-center">
+                <div class="mt-4 flex flex-col sm:flex-row justify-center gap-4">
                     <button id="undo-match-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg" disabled>Undo Last Match</button>
+                    <button id="recalc-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Recalculate All Rankings</button>
                 </div>
             </div>
 
@@ -109,10 +110,19 @@
             <!-- Ranking Rules -->
             <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 mt-8">
                 <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Ranking Rules</h2>
-                <div class="space-y-2 text-gray-300">
-                    <div><span class="font-bold text-amber-200">1)</span> To leapfrog a higher-ranked player, you must defeat them twice in a row. Draws do not reset your winning streak against that player.</div>
-                    <div><span class="font-bold text-amber-200">2)</span> All chess games count. The time controls of a game don't matter.</div>
-                    <div><span class="font-bold text-amber-200">3)</span> Any new player goes straight to the top of the rankings.</div>
+                <div class="space-y-3 text-gray-300 text-lg">
+                    <div class="p-2 bg-gray-700/30 rounded">
+                        <span class="font-bold text-amber-400">1. Leapfrog Rule:</span> To overtake a higher-ranked player, you must defeat them twice in a row.
+                        <div class="mt-1 text-sm text-gray-400 italic pl-5">
+                            Example: If Player A (Rank 10) beats Player B (Rank 2) twice consecutively, Player A takes Rank 2. Player B and everyone else between Rank 2 and 10 shift down by one spot.
+                        </div>
+                    </div>
+                    <div class="p-2 bg-gray-700/30 rounded">
+                        <span class="font-bold text-amber-400">2.</span> Draws do not reset your winning streak against a player, but they do not count as a win.
+                    </div>
+                    <div class="p-2 bg-gray-700/30 rounded">
+                        <span class="font-bold text-amber-400">3.</span> New players enter at the top of the rankings (Rank 1), pushing everyone else down.
+                    </div>
                 </div>
             </div>
         </main>
@@ -127,7 +137,6 @@
 
     <!-- Firebase SDK and Application Logic -->
     <script type="module">
-        // Import Firebase modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -139,15 +148,14 @@
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const playersCollectionPath = `/artifacts/${appId}/public/data/players`;
-        const rankHistoryCollectionPath = `/artifacts/${appId}/public/data/rankHistory`;
-        const gameHistoryCollectionPath = `/artifacts/${appId}/public/data/gameHistory`; // New collection for games
+        const gameHistoryCollectionPath = `/artifacts/${appId}/public/data/gameHistory`;
 
         // --- UI ELEMENT REFERENCES ---
         const loadingEl = document.getElementById('loading');
         const mainContentEl = document.getElementById('main-content');
         const messageBarEl = document.getElementById('message-bar');
         const leaderboardContainerEl = document.getElementById('leaderboard-container');
-        const gameHistoryContainerEl = document.getElementById('game-history-container'); // New UI ref
+        const gameHistoryContainerEl = document.getElementById('game-history-container');
         const searchPlayerInput = document.getElementById('search-player');
         const undoMatchBtn = document.getElementById('undo-match-btn');
         
@@ -166,8 +174,9 @@
                 ? JSON.parse(__firebase_config)
                 : firebaseConfigPlaceholder;
 
+            // Basic check to prevent running with placeholder ID if not in environment
             if (firebaseConfig.projectId === "YOUR_PROJECT_ID") {
-                loadingEl.innerHTML = `...`; // Shortened for brevity
+                loadingEl.innerHTML = `Firebase configuration error.`; 
                 return;
             }
 
@@ -203,7 +212,7 @@
             mainContentEl.style.display = 'block';
             setupEventListeners();
             listenForPlayerUpdates();
-            listenForGameHistoryUpdates(); // New listener
+            listenForGameHistoryUpdates();
             const userIdDisplay = document.createElement('p');
             userIdDisplay.className = 'text-center text-sm text-gray-400 mt-4';
             userIdDisplay.textContent = `User ID: ${userId}`;
@@ -215,6 +224,7 @@
             const playersQuery = query(collection(db, playersCollectionPath));
             onSnapshot(playersQuery, (snapshot) => {
                 players = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                // Sort by rank ascending
                 players.sort((a, b) => a.rank - b.rank);
                 renderLeaderboard();
                 updatePlayerDropdowns();
@@ -236,7 +246,6 @@
                 showMessage("Error loading game history.", 'error');
             });
         }
-
 
         // --- RENDERING FUNCTIONS ---
         function renderLeaderboard() {
@@ -300,7 +309,7 @@
             }
 
             const historyHtml = games.map(game => {
-                const date = game.timestamp.toDate().toLocaleString();
+                const date = game.timestamp ? game.timestamp.toDate().toLocaleString() : 'Unknown Date';
                 let description;
                 if (game.outcome === 'draw') {
                     description = `<span class="font-semibold text-amber-300">${game.whitePlayerName}</span> (White) drew with <span class="font-semibold text-amber-300">${game.blackPlayerName}</span> (Black).`;
@@ -319,9 +328,16 @@
         function updatePlayerDropdowns() {
             const whitePlayerSelect = document.getElementById('white-player');
             const blackPlayerSelect = document.getElementById('black-player');
+            const whiteSel = whitePlayerSelect.value;
+            const blackSel = blackPlayerSelect.value;
+
             const options = players.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
             whitePlayerSelect.innerHTML = `<option value="">Select White Player</option>${options}`;
             blackPlayerSelect.innerHTML = `<option value="">Select Black Player</option>${options}`;
+            
+            if(whiteSel) whitePlayerSelect.value = whiteSel;
+            if(blackSel) blackPlayerSelect.value = blackSel;
+
             updateWinnerDropdown();
         }
         
@@ -332,11 +348,11 @@
             let options = '<option value="">Select Outcome</option>';
             if (whitePlayerId) {
                 const whitePlayer = players.find(p => p.id === whitePlayerId);
-                options += `<option value="${whitePlayerId}">${whitePlayer.name} (White) Wins</option>`;
+                if (whitePlayer) options += `<option value="${whitePlayerId}">${whitePlayer.name} (White) Wins</option>`;
             }
             if (blackPlayerId) {
                 const blackPlayer = players.find(p => p.id === blackPlayerId);
-                options += `<option value="${blackPlayerId}">${blackPlayer.name} (Black) Wins</option>`;
+                if (blackPlayer) options += `<option value="${blackPlayerId}">${blackPlayer.name} (Black) Wins</option>`;
             }
             options += '<option value="draw">Draw</option>';
             winnerSelect.innerHTML = options;
@@ -347,6 +363,7 @@
             document.getElementById('add-player-form').addEventListener('submit', handleAddPlayer);
             document.getElementById('record-match-form').addEventListener('submit', handleRecordMatch);
             document.getElementById('undo-match-btn').addEventListener('click', confirmUndoLastMatch);
+            document.getElementById('recalc-btn').addEventListener('click', handleRecalculateHistory);
             document.getElementById('white-player').addEventListener('change', updateWinnerDropdown);
             document.getElementById('black-player').addEventListener('change', updateWinnerDropdown);
             leaderboardContainerEl.addEventListener('click', (e) => {
@@ -355,9 +372,23 @@
                 const action = target.dataset.action;
                 const playerId = target.dataset.playerId;
                 if (action === 'edit') handleEditPlayer(playerId);
-                if (action === 'remove') confirmRemovePlayer(playerId); // Changed to confirm first
+                if (action === 'remove') confirmRemovePlayer(playerId);
             });
             searchPlayerInput.addEventListener('input', renderLeaderboard);
+        }
+
+        // HELPER: Batch Chunking to prevent 500-limit errors
+        async function commitBatchChunks(db, updates) {
+            const chunkSize = 400; // Safe limit below 500
+            for (let i = 0; i < updates.length; i += chunkSize) {
+                const batch = writeBatch(db);
+                const chunk = updates.slice(i, i + chunkSize);
+                chunk.forEach(op => {
+                    if (op.type === 'update') batch.update(op.ref, op.data);
+                    else if (op.type === 'set') batch.set(op.ref, op.data);
+                });
+                await batch.commit();
+            }
         }
 
         async function handleAddPlayer(e) {
@@ -368,45 +399,316 @@
                 showModal("Player name cannot be empty.");
                 return;
             }
+            
             try {
+                // 1. Check duplicates
                 const existingPlayersQuery = query(collection(db, playersCollectionPath), where("name", "==", playerName));
                 const existingPlayersSnapshot = await getDocs(existingPlayersQuery);
                 if (!existingPlayersSnapshot.empty) {
                     showModal(`A player with the name "${playerName}" already exists.`);
                     return;
                 }
-                const batch = writeBatch(db);
-                const currentPlayersSnapshot = await getDocs(collection(db, playersCollectionPath));
-                currentPlayersSnapshot.docs.forEach(docSnap => {
-                    const playerRef = doc(db, playersCollectionPath, docSnap.id);
-                    batch.update(playerRef, { rank: docSnap.data().rank + 1 });
-                });
-                const newPlayerRef = doc(collection(db, playersCollectionPath));
-                batch.set(newPlayerRef, {
-                    name: playerName, rank: 1, wins: 0, losses: 0, draws: 0,
-                    winsAsWhite: 0, lossesAsWhite: 0, drawsAsWhite: 0,
-                    winsAsBlack: 0, lossesAsBlack: 0, drawsAsBlack: 0,
-                    recentMatchHistory: {},
-                });
-                await batch.commit();
                 
-                // This part for rank history is kept for data integrity but is not displayed.
-                const updatedPlayersSnapshot = await getDocs(query(collection(db, playersCollectionPath)));
-                const updatedPlayers = updatedPlayersSnapshot.docs.map(d => ({id: d.id, ...d.data()}));
-                const currentRankings = updatedPlayers.map(p => ({ playerId: p.id, playerName: p.name, rank: p.rank }));
-                await addDoc(collection(db, rankHistoryCollectionPath), {
-                    timestamp: new Date(),
-                    rankings: currentRankings,
+                // 2. Fetch ALL players to shift ranks
+                const allPlayersSnap = await getDocs(collection(db, playersCollectionPath));
+                let updates = [];
+
+                // Shift everyone down by 1 (Rank X -> Rank X+1)
+                allPlayersSnap.forEach(doc => {
+                    updates.push({
+                        type: 'update',
+                        ref: doc.ref,
+                        data: { rank: doc.data().rank + 1 }
+                    });
                 });
+
+                // 3. Add New Player at Rank 1
+                const newPlayerRef = doc(collection(db, playersCollectionPath));
+                updates.push({
+                    type: 'set',
+                    ref: newPlayerRef,
+                    data: {
+                        name: playerName, 
+                        rank: 1, // Start at Top
+                        wins: 0, losses: 0, draws: 0,
+                        winsAsWhite: 0, lossesAsWhite: 0, drawsAsWhite: 0,
+                        winsAsBlack: 0, lossesAsBlack: 0, drawsAsBlack: 0,
+                        recentMatchHistory: {},
+                    }
+                });
+
+                await commitBatchChunks(db, updates);
+                
                 playerNameInput.value = '';
                 showMessage(`${playerName} added successfully at Rank 1!`, 'success');
+
             } catch (error) {
                 console.error("Error adding player:", error);
                 showMessage("Error adding player.", 'error');
             }
         }
-        
-        function handleEditPlayer(playerId) {
+
+        async function handleRecordMatch(e) {
+            if (e) e.preventDefault(); 
+            
+            const whitePlayerId = document.getElementById('white-player').value;
+            const blackPlayerId = document.getElementById('black-player').value;
+            const winnerId = document.getElementById('winner').value;
+
+            if (!whitePlayerId || !blackPlayerId || !winnerId) {
+                showModal("Please select both players and the match outcome.");
+                return;
+            }
+            if (whitePlayerId === blackPlayerId) {
+                showModal("A player cannot play against themselves.");
+                return;
+            }
+
+            try {
+                await processMatchLogic(whitePlayerId, blackPlayerId, winnerId, true, true);
+                document.getElementById('record-match-form').reset();
+                updateWinnerDropdown();
+            } catch (error) {
+                console.error("Error recording match:", error);
+                showMessage("Error recording match.", 'error');
+            }
+        }
+
+        async function processMatchLogic(whitePlayerId, blackPlayerId, winnerId, saveToDb = true, recordHistory = true) {
+            // Snapshot ALL players to memory for rank shifting logic
+            let allPlayersMap = new Map();
+            if (saveToDb) {
+                 const playersSnapshot = await getDocs(collection(db, playersCollectionPath));
+                 playersSnapshot.docs.forEach(d => allPlayersMap.set(d.id, { ...d.data(), id: d.id }));
+            }
+
+            let whiteData = allPlayersMap.get(whitePlayerId);
+            let blackData = allPlayersMap.get(blackPlayerId);
+            if (!whiteData || !blackData) throw new Error("Players not found");
+
+            // Initialize stats if missing
+            const statFields = ['winsAsWhite', 'lossesAsWhite', 'drawsAsWhite', 'winsAsBlack', 'lossesAsBlack', 'drawsAsBlack', 'recentMatchHistory'];
+            [whiteData, blackData].forEach(playerData => {
+                statFields.forEach(field => {
+                    if (playerData[field] === undefined) playerData[field] = (field === 'recentMatchHistory') ? {} : 0;
+                });
+            });
+
+            // Store original state for Undo
+            if (saveToDb && recordHistory) {
+                 lastMatchData = {
+                    whitePlayerId, blackPlayerId, winnerId,
+                    originalWhiteData: JSON.parse(JSON.stringify(whiteData)),
+                    originalBlackData: JSON.parse(JSON.stringify(blackData)),
+                    // Snapshot all ranks to safely undo any leapfrogs
+                    allRanksSnapshot: Array.from(allPlayersMap.values()).map(p => ({id: p.id, rank: p.rank}))
+                };
+                undoMatchBtn.disabled = false;
+            }
+
+            let rankChanged = false;
+            let messageText = "Match recorded successfully!";
+            const batch = writeBatch(db);
+
+            if (winnerId === 'draw') {
+                whiteData.draws++; blackData.draws++;
+                whiteData.drawsAsWhite++; blackData.drawsAsBlack++;
+                
+                const whiteHistory = whiteData.recentMatchHistory[blackPlayerId] || { streak: 0 };
+                whiteHistory.lastOutcome = 'draw';
+                whiteData.recentMatchHistory[blackPlayerId] = whiteHistory;
+                
+                const blackHistory = blackData.recentMatchHistory[whitePlayerId] || { streak: 0 };
+                blackHistory.lastOutcome = 'draw';
+                blackData.recentMatchHistory[whitePlayerId] = blackHistory;
+
+            } else {
+                const winnerData = winnerId === whitePlayerId ? whiteData : blackData;
+                const loserData = winnerId === whitePlayerId ? blackData : whiteData;
+                const winnerOpponentId = winnerId === whitePlayerId ? blackPlayerId : whitePlayerId;
+                const loserOpponentId = winnerId === whitePlayerId ? whitePlayerId : blackPlayerId;
+
+                winnerData.wins++; loserData.losses++;
+                if (winnerId === whitePlayerId) { whiteData.winsAsWhite++; blackData.lossesAsBlack++; } 
+                else { blackData.winsAsBlack++; whiteData.lossesAsWhite++; }
+
+                // Streak Logic: Increments on Win. Resets on Loss. Draw maintains status quo (doesn't reset, doesn't increment).
+                const winnerHistory = winnerData.recentMatchHistory[winnerOpponentId] || { streak: 0, lastOutcome: '' };
+                winnerHistory.streak = (winnerHistory.lastOutcome === 'loss') ? 1 : (winnerHistory.streak || 0) + 1;
+                winnerHistory.lastOutcome = 'win';
+                winnerData.recentMatchHistory[winnerOpponentId] = winnerHistory;
+
+                const loserHistory = loserData.recentMatchHistory[loserOpponentId] || { streak: 0 };
+                loserHistory.streak = 0;
+                loserHistory.lastOutcome = 'loss';
+                loserData.recentMatchHistory[loserOpponentId] = loserHistory;
+
+                // LEAPFROG LOGIC
+                // Win 2 in a row against lower-ranked (higher number) player
+                if (winnerHistory.streak >= 2 && winnerData.rank > loserData.rank) {
+                    rankChanged = true;
+                    messageText = `${winnerData.name} leapfrogged ${loserData.name} (Rank ${loserData.rank})!`;
+
+                    const oldWinnerRank = winnerData.rank;
+                    const targetRank = loserData.rank;
+
+                    // Winner takes target rank
+                    winnerData.rank = targetRank;
+                    winnerHistory.streak = 0; // Reset streak
+
+                    // Shift intermediate players down
+                    allPlayersMap.forEach(p => {
+                        if (p.id !== winnerData.id && p.rank >= targetRank && p.rank < oldWinnerRank) {
+                            p.rank += 1;
+                            batch.update(doc(db, playersCollectionPath, p.id), { rank: p.rank });
+                        }
+                    });
+                }
+            }
+
+            if (saveToDb) {
+                batch.update(doc(db, playersCollectionPath, whitePlayerId), whiteData);
+                batch.update(doc(db, playersCollectionPath, blackPlayerId), blackData);
+
+                if (recordHistory) {
+                    const gameEntry = {
+                        timestamp: new Date(),
+                        whitePlayerName: whiteData.name,
+                        blackPlayerName: blackData.name,
+                        whitePlayerId, blackPlayerId,
+                        outcome: winnerId === 'draw' ? 'draw' : 'win',
+                        winnerId: winnerId === 'draw' ? null : winnerId,
+                        winnerColor: winnerId === 'draw' ? null : (winnerId === whitePlayerId ? 'White' : 'Black'),
+                        winnerName: winnerId === 'draw' ? null : (winnerId === whitePlayerId ? whiteData.name : blackData.name),
+                        loserName: winnerId === 'draw' ? null : (winnerId === whitePlayerId ? blackData.name : whiteData.name)
+                    };
+                    const historyRef = await addDoc(collection(db, gameHistoryCollectionPath), gameEntry);
+                    if(lastMatchData) lastMatchData.gameHistoryId = historyRef.id;
+                }
+                await batch.commit();
+                showMessage(messageText, 'success');
+            }
+        }
+
+        async function handleRecalculateHistory() {
+            if (!confirm("Start Recalculation?\n\n1. All stats (wins/losses) will be reset to zero.\n2. Current ranks will be used as the starting lineup.\n3. Every game in history will be replayed to calculate new ranks based on the Leapfrog rule.\n\nThis cannot be undone.")) return;
+            
+            loadingEl.style.display = 'block';
+            loadingEl.textContent = "Recalculating history... Do not close window.";
+            mainContentEl.classList.add('opacity-50', 'pointer-events-none');
+
+            try {
+                // Fetch All Data
+                const gamesSnap = await getDocs(collection(db, gameHistoryCollectionPath));
+                // Sort oldest first
+                const games = gamesSnap.docs.map(d => d.data()).sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+                
+                const playersSnap = await getDocs(collection(db, playersCollectionPath));
+                let simPlayers = new Map();
+                
+                // Reset stats but keep current Ranks as seed
+                playersSnap.docs.forEach(d => {
+                    simPlayers.set(d.id, {
+                        ...d.data(),
+                        id: d.id,
+                        wins: 0, losses: 0, draws: 0,
+                        winsAsWhite: 0, lossesAsWhite: 0, drawsAsWhite: 0,
+                        winsAsBlack: 0, lossesAsBlack: 0, drawsAsBlack: 0,
+                        recentMatchHistory: {} // Clear history
+                    });
+                });
+
+                // Replay History
+                for (const game of games) {
+                    const white = simPlayers.get(game.whitePlayerId);
+                    const black = simPlayers.get(game.blackPlayerId);
+                    
+                    if (!white || !black) continue; // Skip deleted players
+
+                    const winnerId = game.winnerId || 'draw';
+                    
+                    if (winnerId === 'draw') {
+                        white.draws++; black.draws++;
+                        white.drawsAsWhite++; black.drawsAsBlack++;
+                        
+                        const wh = white.recentMatchHistory[black.id] || { streak: 0 };
+                        wh.lastOutcome = 'draw';
+                        white.recentMatchHistory[black.id] = wh;
+                        
+                        const bh = black.recentMatchHistory[white.id] || { streak: 0 };
+                        bh.lastOutcome = 'draw';
+                        black.recentMatchHistory[white.id] = bh;
+                    } else {
+                        const winner = winnerId === white.id ? white : black;
+                        const loser = winnerId === white.id ? black : white;
+                        const winnerOppId = winnerId === white.id ? black.id : white.id;
+                        const loserOppId = winnerId === white.id ? white.id : black.id;
+
+                        winner.wins++; loser.losses++;
+                        if (winner === white) { white.winsAsWhite++; black.lossesAsBlack++; }
+                        else { black.winsAsBlack++; white.lossesAsWhite++; }
+
+                        // Streak
+                        const wh = winner.recentMatchHistory[winnerOppId] || { streak: 0 };
+                        wh.streak = (wh.lastOutcome === 'loss') ? 1 : (wh.streak || 0) + 1;
+                        wh.lastOutcome = 'win';
+                        winner.recentMatchHistory[winnerOppId] = wh;
+
+                        const lh = loser.recentMatchHistory[loserOppId] || { streak: 0 };
+                        lh.streak = 0;
+                        lh.lastOutcome = 'loss';
+                        loser.recentMatchHistory[loserOppId] = lh;
+
+                        // LEAPFROG RULE (In-Memory)
+                        if (wh.streak >= 2 && winner.rank > loser.rank) {
+                            const oldWinnerRank = winner.rank;
+                            const targetRank = loser.rank;
+                            winner.rank = targetRank;
+                            wh.streak = 0;
+
+                            simPlayers.forEach(p => {
+                                if (p.id !== winner.id && p.rank >= targetRank && p.rank < oldWinnerRank) {
+                                    p.rank++;
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // Commit results using Chunking
+                let updates = [];
+                simPlayers.forEach(p => {
+                    updates.push({
+                        type: 'update',
+                        ref: doc(db, playersCollectionPath, p.id),
+                        data: {
+                            rank: p.rank,
+                            wins: p.wins, losses: p.losses, draws: p.draws,
+                            winsAsWhite: p.winsAsWhite, lossesAsWhite: p.lossesAsWhite, drawsAsWhite: p.drawsAsWhite,
+                            winsAsBlack: p.winsAsBlack, lossesAsBlack: p.lossesAsBlack, drawsAsBlack: p.drawsAsBlack,
+                            recentMatchHistory: p.recentMatchHistory
+                        }
+                    });
+                });
+
+                await commitBatchChunks(db, updates);
+
+                loadingEl.style.display = 'none';
+                loadingEl.textContent = "";
+                mainContentEl.classList.remove('opacity-50', 'pointer-events-none');
+                showMessage("Historical recalculation complete!", 'success');
+                undoMatchBtn.disabled = true;
+                lastMatchData = null;
+
+            } catch (error) {
+                console.error(error);
+                loadingEl.style.display = 'none';
+                mainContentEl.classList.remove('opacity-50', 'pointer-events-none');
+                showMessage("Error during recalculation: " + error.message, 'error');
+            }
+        }
+
+        async function handleEditPlayer(playerId) {
             const player = players.find(p => p.id === playerId);
             if (!player) return;
 
@@ -425,26 +727,14 @@
             document.getElementById('edit-player-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const newName = document.getElementById('edit-player-name-input').value.trim();
-                if (!newName) {
-                    showModal("Player name cannot be empty.");
-                    return;
-                }
+                if (!newName) return;
+                
                 try {
-                    // BUG FIX: Check if player still exists before updating
-                    const playerRef = doc(db, playersCollectionPath, playerId);
-                    const playerSnap = await getDoc(playerRef);
-                    if (!playerSnap.exists()) {
-                         showMessage("This player was removed by another user.", 'error');
-                         closeModal();
-                         return;
-                    }
-                    await updateDoc(playerRef, { name: newName });
-                    showMessage(`Player name updated to ${newName}!`, 'success');
+                    await updateDoc(doc(db, playersCollectionPath, playerId), { name: newName });
+                    showMessage(`Player updated!`, 'success');
                     closeModal();
                 } catch (error) {
-                    console.error("Error updating player name:", error);
-                    showMessage("Error updating player name.", 'error');
-                    closeModal();
+                    showMessage("Error updating.", 'error');
                 }
             });
             document.getElementById('cancel-edit-btn').addEventListener('click', closeModal);
@@ -452,16 +742,13 @@
 
         function confirmRemovePlayer(playerId) {
             const player = players.find(p => p.id === playerId);
-            if (!player) {
-                showMessage("Could not find player to remove.", 'error');
-                return;
-            };
+            if (!player) return;
 
             const content = `
                 <div class="text-center">
-                    <p class="mb-4">Are you sure you want to remove <span class="font-bold">${player.name}</span>? This action cannot be undone.</p>
+                    <p class="mb-4">Remove <span class="font-bold">${player.name}</span>? This shifts lower ranks up.</p>
                     <div class="flex justify-center space-x-4">
-                        <button id="confirm-remove-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Yes, Remove</button>
+                        <button id="confirm-remove-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Yes</button>
                         <button id="cancel-remove-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
                     </div>
                 </div>
@@ -473,229 +760,84 @@
         }
         
         async function handleRemovePlayer(playerId) {
-            closeModal(); // Close confirmation modal immediately
+            closeModal();
              try {
-                // BUG FIX: Get the definitive rank of the player just before deletion
-                const playerToRemoveRef = doc(db, playersCollectionPath, playerId);
-                const playerToRemoveSnap = await getDoc(playerToRemoveRef);
-                if (!playerToRemoveSnap.exists()) {
-                    showMessage("This player was already removed.", "info");
-                    return;
-                }
-                const playerToRemoveData = playerToRemoveSnap.data();
-                const removedRank = playerToRemoveData.rank;
-                const playerName = playerToRemoveData.name;
-
+                const playerRef = doc(db, playersCollectionPath, playerId);
+                const playerSnap = await getDoc(playerRef);
+                if (!playerSnap.exists()) return;
+                
+                const rankToRemove = playerSnap.data().rank;
                 const batch = writeBatch(db);
 
-                // 1. Delete the player document
-                batch.delete(playerToRemoveRef);
+                batch.delete(playerRef);
 
-                // 2. BUG FIX: Update ranks of all players below the removed one
-                const playersToUpdateQuery = query(collection(db, playersCollectionPath), where("rank", ">", removedRank));
-                const playersToUpdateSnapshot = await getDocs(playersToUpdateQuery);
-                playersToUpdateSnapshot.forEach(playerDoc => {
-                    const playerRef = doc(db, playersCollectionPath, playerDoc.id);
-                    batch.update(playerRef, { rank: playerDoc.data().rank - 1 });
-                });
-
-                // 3. Clean up rank history (optional, but good practice)
-                const rankHistorySnapshot = await getDocs(collection(db, rankHistoryCollectionPath));
-                rankHistorySnapshot.docs.forEach(historyDoc => {
-                    const currentRankings = historyDoc.data().rankings;
-                    const updatedRankings = currentRankings.filter(ranking => ranking.playerId !== playerId);
-                    if (updatedRankings.length < currentRankings.length) {
-                         batch.update(doc(db, rankHistoryCollectionPath, historyDoc.id), { rankings: updatedRankings });
-                    }
+                // Shift everyone below up by 1
+                const lowerRankedQuery = query(collection(db, playersCollectionPath), where("rank", ">", rankToRemove));
+                const lowerRankedSnap = await getDocs(lowerRankedQuery);
+                lowerRankedSnap.forEach(d => {
+                    batch.update(doc(db, playersCollectionPath, d.id), { rank: d.data().rank - 1 });
                 });
 
                 await batch.commit();
-                showMessage(`${playerName} removed successfully!`, 'success');
-                
+                showMessage(`Player removed.`, 'success');
             } catch (error) {
                 console.error("Error removing player:", error);
                 showMessage(`Error removing player.`, 'error');
             }
         }
 
-
-        async function handleRecordMatch(e) {
-            e.preventDefault();
-            const whitePlayerId = document.getElementById('white-player').value;
-            const blackPlayerId = document.getElementById('black-player').value;
-            const winnerId = document.getElementById('winner').value;
-
-            if (!whitePlayerId || !blackPlayerId || !winnerId) {
-                showModal("Please select both players and the match outcome.");
-                return;
-            }
-            if (whitePlayerId === blackPlayerId) {
-                showModal("A player cannot play against themselves.");
-                return;
-            }
-
-            try {
-                const whitePlayerRef = doc(db, playersCollectionPath, whitePlayerId);
-                const blackPlayerRef = doc(db, playersCollectionPath, blackPlayerId);
-                const whitePlayerSnap = await getDoc(whitePlayerRef);
-                const blackPlayerSnap = await getDoc(blackPlayerRef);
-
-                if (!whitePlayerSnap.exists() || !blackPlayerSnap.exists()) {
-                    showMessage("One or both players not found. Please refresh.", 'error');
-                    return;
-                }
-
-                let whiteData = { ...whitePlayerSnap.data() };
-                let blackData = { ...blackPlayerSnap.data() };
-
-                const originalWhiteData = JSON.parse(JSON.stringify(whiteData));
-                const originalBlackData = JSON.parse(JSON.stringify(blackData));
-                
-                const whitePlayerName = whiteData.name;
-                const blackPlayerName = blackData.name;
-
-                const statFields = ['winsAsWhite', 'lossesAsWhite', 'drawsAsWhite', 'winsAsBlack', 'lossesAsBlack', 'drawsAsBlack', 'recentMatchHistory'];
-                [whiteData, blackData].forEach(playerData => {
-                    statFields.forEach(field => {
-                        if (playerData[field] === undefined) {
-                            playerData[field] = (field === 'recentMatchHistory') ? {} : 0;
-                        }
-                    });
-                });
-
-                let rankChanged = false;
-                let messageText = "Match recorded successfully!";
-                
-                const gameHistoryEntry = { timestamp: new Date(), whitePlayerName, blackPlayerName, whitePlayerId, blackPlayerId };
-
-                if (winnerId === 'draw') {
-                    whiteData.draws++; blackData.draws++;
-                    whiteData.drawsAsWhite++; blackData.drawsAsBlack++;
-                    const whiteHistory = whiteData.recentMatchHistory[blackPlayerId] || { streak: 0 };
-                    whiteHistory.lastOutcome = 'draw';
-                    whiteData.recentMatchHistory[blackPlayerId] = whiteHistory;
-                    const blackHistory = blackData.recentMatchHistory[whitePlayerId] || { streak: 0 };
-                    blackHistory.lastOutcome = 'draw';
-                    blackData.recentMatchHistory[whitePlayerId] = blackHistory;
-                    gameHistoryEntry.outcome = 'draw';
-                } else {
-                    const winnerData = winnerId === whitePlayerId ? whiteData : blackData;
-                    const loserData = winnerId === whitePlayerId ? blackData : whiteData;
-                    const winnerOpponentId = winnerId === whitePlayerId ? blackPlayerId : whitePlayerId;
-                    const loserOpponentId = winnerId === whitePlayerId ? whitePlayerId : blackPlayerId;
-                    winnerData.wins++; loserData.losses++;
-                    if (winnerId === whitePlayerId) { whiteData.winsAsWhite++; blackData.lossesAsBlack++; } 
-                    else { blackData.winsAsBlack++; whiteData.lossesAsWhite++; }
-                    const winnerHistory = winnerData.recentMatchHistory[winnerOpponentId] || { streak: 0, lastOutcome: '' };
-                    winnerHistory.streak = (winnerHistory.lastOutcome === 'loss') ? 1 : winnerHistory.streak + 1;
-                    winnerHistory.lastOutcome = 'win';
-                    winnerData.recentMatchHistory[winnerOpponentId] = winnerHistory;
-                    const loserHistory = loserData.recentMatchHistory[loserOpponentId] || { streak: 0 };
-                    loserHistory.streak = 0;
-                    loserHistory.lastOutcome = 'loss';
-                    loserData.recentMatchHistory[loserOpponentId] = loserHistory;
-
-                    if (winnerHistory.streak === 2 && winnerData.rank > loserData.rank) {
-                        [winnerData.rank, loserData.rank] = [loserData.rank, winnerData.rank];
-                        rankChanged = true;
-                        messageText = `${winnerData.name} beat ${loserData.name} twice and leapfrogged them!`;
-                    }
-                    
-                    gameHistoryEntry.outcome = 'win';
-                    gameHistoryEntry.winnerId = winnerId;
-                    gameHistoryEntry.loserId = loserOpponentId;
-                    gameHistoryEntry.winnerName = (winnerId === whitePlayerId) ? whitePlayerName : blackPlayerName;
-                    gameHistoryEntry.loserName = (winnerId === whitePlayerId) ? blackPlayerName : whitePlayerName;
-                    gameHistoryEntry.winnerColor = (winnerId === whitePlayerId) ? 'White' : 'Black';
-                }
-                
-                const newGameHistoryDocRef = await addDoc(collection(db, gameHistoryCollectionPath), gameHistoryEntry);
-                
-                const batch = writeBatch(db);
-                batch.update(whitePlayerRef, whiteData);
-                batch.update(blackPlayerRef, blackData);
-                await batch.commit();
-
-                const currentPlayers = players.map(p => {
-                    if (p.id === whitePlayerId) return { ...p, ...whiteData };
-                    if (p.id === blackPlayerId) return { ...p, ...blackData };
-                    return p;
-                });
-                const currentRankings = currentPlayers.map(p => ({ playerId: p.id, playerName: p.name, rank: p.rank }));
-                const newRankHistoryDocRef = await addDoc(collection(db, rankHistoryCollectionPath), {
-                    timestamp: new Date(),
-                    rankings: currentRankings,
-                });
-
-                lastMatchData = {
-                    whitePlayerId,
-                    blackPlayerId,
-                    winnerId,
-                    rankHistoryDocId: newRankHistoryDocRef.id,
-                    gameHistoryDocId: newGameHistoryDocRef.id, // Store game history doc ID for undo
-                    originalWhitePlayerStats: originalWhiteData,
-                    originalBlackPlayerStats: originalBlackData,
-                    didRankSwap: rankChanged
-                };
-                undoMatchBtn.disabled = false;
-
-                showMessage(messageText, 'success');
-                document.getElementById('record-match-form').reset();
-                updateWinnerDropdown();
-
-            } catch (error) {
-                console.error("Error recording match:", error);
-                showMessage("Error recording match.", 'error');
-            }
-        }
-
-        function confirmUndoLastMatch() {
+        async function confirmUndoLastMatch() {
             if (!lastMatchData) {
-                showModal("No last match to undo.");
+                showModal("No match to undo.");
                 return;
             }
-            const content = `
+            // Check if undo involves rank shifts
+            if (lastMatchData.allRanksSnapshot) {
+                 const content = `
                 <div class="text-center">
-                    <p class="mb-4">Are you sure you want to undo the last recorded match? This will revert stats and ranks.</p>
+                    <p class="mb-4">Undo last match? This will restore previous stats and ranks.</p>
                     <div class="flex justify-center space-x-4">
                         <button id="confirm-undo-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md">Yes, Undo</button>
                         <button id="cancel-undo-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
                     </div>
-                </div>
-            `;
-            showModal(content, false);
-            document.getElementById('confirm-undo-btn').addEventListener('click', async () => {
-                closeModal();
-                await handleUndoLastMatch();
-            });
-            document.getElementById('cancel-undo-btn').addEventListener('click', closeModal);
+                </div>`;
+                showModal(content, false);
+                document.getElementById('confirm-undo-btn').addEventListener('click', async () => {
+                    closeModal();
+                    await executeUndo();
+                });
+                document.getElementById('cancel-undo-btn').addEventListener('click', closeModal);
+            }
         }
 
-        async function handleUndoLastMatch() {
-            if (!lastMatchData) {
-                showMessage("No last match data available to undo.", 'error');
-                return;
-            }
-            const { whitePlayerId, blackPlayerId, rankHistoryDocId, gameHistoryDocId, originalWhitePlayerStats, originalBlackPlayerStats } = lastMatchData;
+        async function executeUndo() {
             try {
                 const batch = writeBatch(db);
-                const whitePlayerRef = doc(db, playersCollectionPath, whitePlayerId);
-                const blackPlayerRef = doc(db, playersCollectionPath, blackPlayerId);
-                batch.update(whitePlayerRef, originalWhitePlayerStats);
-                batch.update(blackPlayerRef, originalBlackPlayerStats);
-                batch.delete(doc(db, rankHistoryCollectionPath, rankHistoryDocId));
-                batch.delete(doc(db, gameHistoryCollectionPath, gameHistoryDocId)); // Also delete game history
+                const { whitePlayerId, blackPlayerId, originalWhiteData, originalBlackData, allRanksSnapshot, gameHistoryId } = lastMatchData;
+
+                batch.update(doc(db, playersCollectionPath, whitePlayerId), originalWhiteData);
+                batch.update(doc(db, playersCollectionPath, blackPlayerId), originalBlackData);
+                
+                // Restore Ranks for everyone (safest way to handle leapfrog undo)
+                allRanksSnapshot.forEach(p => {
+                    batch.update(doc(db, playersCollectionPath, p.id), { rank: p.rank });
+                });
+
+                if (gameHistoryId) {
+                    batch.delete(doc(db, gameHistoryCollectionPath, gameHistoryId));
+                }
+
                 await batch.commit();
                 lastMatchData = null;
                 undoMatchBtn.disabled = true;
-                showMessage("Last match successfully undone!", 'success');
+                showMessage("Undo successful.", 'success');
             } catch (error) {
-                console.error("Error undoing last match:", error);
-                showMessage("Error undoing last match.", 'error');
+                console.error("Undo failed", error);
+                showMessage("Undo failed.", 'error');
             }
         }
 
-        // --- UTILITY FUNCTIONS ---
+        // --- UTILS ---
         function showMessage(msg, type = 'info') {
             messageBarEl.textContent = msg;
             messageBarEl.className = `p-3 rounded-lg text-center text-white mb-4 ${type === 'error' ? 'bg-red-700' : 'bg-blue-700'}`;
@@ -719,12 +861,9 @@
         }
 
         function closeModal() {
-            const modal = document.getElementById('modal');
-            modal.style.display = 'none';
-            document.getElementById('modal-content').innerHTML = ''; // Clear content
+            document.getElementById('modal').style.display = 'none';
         }
 
     </script>
 </body>
 </html>
-
