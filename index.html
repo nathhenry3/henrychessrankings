@@ -9,33 +9,33 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        /* Use Inter font family */
+        /* Use Ubuntu font family */
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Ubuntu', sans-serif;
         }
         /* Custom scrollbar for a better look */
         ::-webkit-scrollbar {
             width: 8px;
         }
         ::-webkit-scrollbar-track {
-            background: #2d3748; /* bg-gray-800 */
+            background: #0b1220; /* deep slate track */
         }
         ::-webkit-scrollbar-thumb {
-            background: #718096; /* bg-gray-500 */
+            background: #1e3a8a; /* neon-blue tinted thumb */
             border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #a0aec0; /* bg-gray-400 */
+            background: #2563eb; /* brighter blue hover */
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100">
+<body class="bg-slate-950 text-slate-100">
 
     <!-- Main Application Container -->
     <div id="app-container" class="p-4 sm:p-6 lg:p-8">
-        <h1 class="text-4xl sm:text-5xl font-bold text-center mb-8 text-amber-400">Henry Chess Rankings</h1>
+        <h1 class="text-4xl sm:text-5xl font-bold text-center mb-8 text-cyan-400">Henry Chess Rankings</h1>
         
         <!-- Loading Indicator -->
         <div id="loading" class="text-center text-lg p-4">Loading Firebase...</div>
@@ -47,39 +47,39 @@
             <div id="message-bar" class="p-3 rounded-lg text-center text-white mb-4 hidden"></div>
 
             <!-- Add Player Form -->
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
-                <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Add New Player</h2>
+            <div class="bg-slate-900 p-6 rounded-lg shadow-lg border border-slate-800">
+                <h2 class="text-3xl font-semibold text-cyan-300 mb-4 text-center">Add New Player</h2>
                 <form id="add-player-form" class="flex flex-col sm:flex-row gap-4">
-                    <input type="text" id="new-player-name" placeholder="Player Name" class="flex-grow p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
-                    <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Add Player</button>
+                    <input type="text" id="new-player-name" placeholder="Player Name" class="flex-grow p-3 rounded-md bg-slate-800 text-white border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                    <button type="submit" class="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Add Player</button>
                 </form>
             </div>
 
             <!-- Record Match Form -->
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
-                <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Record Match</h2>
+            <div class="bg-slate-900 p-6 rounded-lg shadow-lg border border-slate-800">
+                <h2 class="text-3xl font-semibold text-cyan-300 mb-4 text-center">Record Match</h2>
                 <form id="record-match-form" class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label for="white-player" class="block text-sm font-medium text-gray-300 mb-1">White:</label>
-                            <select id="white-player" class="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            <label for="white-player" class="block text-sm font-medium text-slate-300 mb-1">White:</label>
+                            <select id="white-player" class="w-full p-3 rounded-md bg-slate-800 text-white border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
                                 <option value="">Select White Player</option>
                             </select>
                         </div>
                         <div>
-                            <label for="black-player" class="block text-sm font-medium text-gray-300 mb-1">Black:</label>
-                            <select id="black-player" class="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            <label for="black-player" class="block text-sm font-medium text-slate-300 mb-1">Black:</label>
+                            <select id="black-player" class="w-full p-3 rounded-md bg-slate-800 text-white border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
                                 <option value="">Select Black Player</option>
                             </select>
                         </div>
                     </div>
                     <div>
-                        <label for="winner" class="block text-sm font-medium text-gray-300 mb-1">Outcome:</label>
-                        <select id="winner" class="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                        <label for="winner" class="block text-sm font-medium text-slate-300 mb-1">Outcome:</label>
+                        <select id="winner" class="w-full p-3 rounded-md bg-slate-800 text-white border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
                             <option value="">Select Outcome</option>
                         </select>
                     </div>
-                    <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Record Match</button>
+                    <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Record Match</button>
                 </form>
                 <div class="mt-4 flex flex-col sm:flex-row justify-center gap-4">
                     <button id="undo-match-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg" disabled>Undo Last Match</button>
@@ -88,10 +88,10 @@
             </div>
 
             <!-- Leaderboard Table -->
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
-                <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Leaderboard</h2>
+            <div class="bg-slate-900 p-6 rounded-lg shadow-lg border border-slate-800">
+                <h2 class="text-3xl font-semibold text-cyan-300 mb-4 text-center">Leaderboard</h2>
                 <div class="mb-4">
-                    <input type="text" id="search-player" placeholder="Search player by name..." class="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                    <input type="text" id="search-player" placeholder="Search player by name..." class="w-full p-3 rounded-md bg-slate-800 text-white border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
                 </div>
                 <div id="leaderboard-container" class="overflow-x-auto">
                     <!-- Table will be rendered here by JavaScript -->
@@ -99,29 +99,29 @@
             </div>
 
             <!-- Game History -->
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
-                <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Game History</h2>
+            <div class="bg-slate-900 p-6 rounded-lg shadow-lg border border-slate-800">
+                <h2 class="text-3xl font-semibold text-cyan-300 mb-4 text-center">Game History</h2>
                 <div id="game-history-container" class="max-h-80 overflow-y-auto pr-2 space-y-2">
                     <!-- Game history will be rendered here by JavaScript -->
-                    <p class="text-center text-gray-400">No games recorded yet.</p>
+                    <p class="text-center text-slate-400">No games recorded yet.</p>
                 </div>
             </div>
 
             <!-- Ranking Rules -->
-            <div class="bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700 mt-8">
-                <h2 class="text-3xl font-semibold text-amber-300 mb-4 text-center">Ranking Rules</h2>
-                <div class="space-y-3 text-gray-300 text-lg">
-                    <div class="p-2 bg-gray-700/30 rounded">
-                        <span class="font-bold text-amber-400">1. Leapfrog Rule:</span> To overtake a higher-ranked player, you must defeat them twice in a row.
-                        <div class="mt-1 text-sm text-gray-400 italic pl-5">
+            <div class="bg-slate-900 p-6 rounded-lg shadow-lg border border-slate-800 mt-8">
+                <h2 class="text-3xl font-semibold text-cyan-300 mb-4 text-center">Ranking Rules</h2>
+                <div class="space-y-3 text-slate-300 text-lg">
+                    <div class="p-2 bg-slate-800/30 rounded">
+                        <span class="font-bold text-cyan-400">1. Leapfrog Rule:</span> To overtake a higher-ranked player, you must defeat them twice in a row.
+                        <div class="mt-1 text-sm text-slate-400 italic pl-5">
                             Example: If Player A (Rank 10) beats Player B (Rank 2) twice consecutively, Player A takes Rank 2. Player B and everyone else between Rank 2 and 10 shift down by one spot.
                         </div>
                     </div>
-                    <div class="p-2 bg-gray-700/30 rounded">
-                        <span class="font-bold text-amber-400">2.</span> Draws do not reset your winning streak against a player, but they do not count as a win.
+                    <div class="p-2 bg-slate-800/30 rounded">
+                        <span class="font-bold text-cyan-400">2.</span> Draws do not reset your winning streak against a player, but they do not count as a win.
                     </div>
-                    <div class="p-2 bg-gray-700/30 rounded">
-                        <span class="font-bold text-amber-400">3.</span> New players enter at the top of the rankings (Rank 1), pushing everyone else down.
+                    <div class="p-2 bg-slate-800/30 rounded">
+                        <span class="font-bold text-cyan-400">3.</span> New players enter at the top of the rankings (Rank 1), pushing everyone else down.
                     </div>
                 </div>
             </div>
@@ -130,7 +130,7 @@
 
     <!-- Modal Dialog -->
     <div id="modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 hidden">
-        <div id="modal-content" class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full border border-gray-700">
+        <div id="modal-content" class="bg-slate-900 p-6 rounded-lg shadow-xl max-w-sm w-full border border-slate-800">
             <!-- Modal content will be injected here -->
         </div>
     </div>
@@ -214,7 +214,7 @@
             listenForPlayerUpdates();
             listenForGameHistoryUpdates();
             const userIdDisplay = document.createElement('p');
-            userIdDisplay.className = 'text-center text-sm text-gray-400 mt-4';
+            userIdDisplay.className = 'text-center text-sm text-slate-400 mt-4';
             userIdDisplay.textContent = `User ID: ${userId}`;
             document.getElementById('app-container').appendChild(userIdDisplay);
         }
@@ -253,26 +253,26 @@
             const filteredPlayers = players.filter(p => p.name.toLowerCase().includes(searchTerm));
 
             if (filteredPlayers.length === 0) {
-                leaderboardContainerEl.innerHTML = `<p class="text-center text-gray-400">No players yet or no players match your search. Add some players to get started!</p>`;
+                leaderboardContainerEl.innerHTML = `<p class="text-center text-slate-400">No players yet or no players match your search. Add some players to get started!</p>`;
                 return;
             }
 
             const table = `
-                <table class="min-w-full divide-y divide-gray-700">
-                    <thead class="bg-gray-700">
+                <table class="min-w-full divide-y divide-slate-800">
+                    <thead class="bg-slate-800">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider rounded-tl-lg">Rank</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Player Name</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Wins</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Losses</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Draws</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Win %</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">White Win %</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Black Win %</th>
-                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider rounded-tr-lg">Actions</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider rounded-tl-lg">Rank</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Player Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Wins</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Losses</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Draws</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Win %</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">White Win %</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Black Win %</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider rounded-tr-lg">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="bg-gray-800 divide-y divide-gray-700">
+                    <tbody class="bg-slate-900 divide-y divide-slate-800">
                         ${filteredPlayers.map(player => {
                             const totalGames = player.wins + player.losses + player.draws;
                             const overallWinRate = totalGames > 0 ? ((player.wins / totalGames) * 100).toFixed(2) : '0.00';
@@ -282,15 +282,15 @@
                             const blackWinRate = totalGamesAsBlack > 0 ? (((player.winsAsBlack || 0) / totalGamesAsBlack) * 100).toFixed(2) : '0.00';
 
                             return `
-                                <tr class="hover:bg-gray-700 transition duration-150 ease-in-out">
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-200">${player.rank}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${player.name}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${player.wins}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${player.losses}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${player.draws}</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${overallWinRate}%</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${whiteWinRate}%</td>
-                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-300">${blackWinRate}%</td>
+                                <tr class="hover:bg-slate-800 transition duration-150 ease-in-out">
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-200">${player.rank}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-300">${player.name}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-300">${player.wins}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-300">${player.losses}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-300">${player.draws}</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-300">${overallWinRate}%</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-300">${whiteWinRate}%</td>
+                                    <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-300">${blackWinRate}%</td>
                                     <td class="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
                                         <button data-action="edit" data-player-id="${player.id}" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-md transition duration-300 ease-in-out transform hover:scale-105">Edit</button>
                                         <button data-action="remove" data-player-id="${player.id}" class="ml-2 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-md transition duration-300 ease-in-out transform hover:scale-105">Remove</button>
@@ -304,7 +304,7 @@
 
         function renderGameHistory(games) {
             if (games.length === 0) {
-                gameHistoryContainerEl.innerHTML = `<p class="text-center text-gray-400">No games recorded yet.</p>`;
+                gameHistoryContainerEl.innerHTML = `<p class="text-center text-slate-400">No games recorded yet.</p>`;
                 return;
             }
 
@@ -312,14 +312,14 @@
                 const date = game.timestamp ? game.timestamp.toDate().toLocaleString() : 'Unknown Date';
                 let description;
                 if (game.outcome === 'draw') {
-                    description = `<span class="font-semibold text-amber-300">${game.whitePlayerName}</span> (White) drew with <span class="font-semibold text-amber-300">${game.blackPlayerName}</span> (Black).`;
+                    description = `<span class="font-semibold text-cyan-300">${game.whitePlayerName}</span> (White) drew with <span class="font-semibold text-cyan-300">${game.blackPlayerName}</span> (Black).`;
                 } else {
-                    description = `<span class="font-semibold text-amber-300">${game.winnerName}</span> ${game.winnerColor === 'White' ? '(White)' : '(Black)'} beat <span class="font-semibold text-amber-300">${game.loserName}</span> ${game.winnerColor === 'White' ? '(Black)' : '(White)'}.`;
+                    description = `<span class="font-semibold text-cyan-300">${game.winnerName}</span> ${game.winnerColor === 'White' ? '(White)' : '(Black)'} beat <span class="font-semibold text-cyan-300">${game.loserName}</span> ${game.winnerColor === 'White' ? '(Black)' : '(White)'}.`;
                 }
                 return `
-                    <div class="p-3 bg-gray-700/50 rounded-md">
-                        <p class="text-sm text-gray-300">${description}</p>
-                        <p class="text-xs text-gray-500 text-right">${date}</p>
+                    <div class="p-3 bg-slate-800/50 rounded-md">
+                        <p class="text-sm text-slate-300">${description}</p>
+                        <p class="text-xs text-slate-500 text-right">${date}</p>
                     </div>`;
             }).join('');
             gameHistoryContainerEl.innerHTML = historyHtml;
@@ -717,12 +717,12 @@
             if (!player) return;
 
             const content = `
-                <h3 class="text-2xl font-semibold text-amber-300 mb-4 text-center">Edit Player Name</h3>
+                <h3 class="text-2xl font-semibold text-cyan-300 mb-4 text-center">Edit Player Name</h3>
                 <form id="edit-player-form" class="space-y-4">
-                    <input type="text" id="edit-player-name-input" value="${player.name}" class="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                    <input type="text" id="edit-player-name-input" value="${player.name}" class="w-full p-3 rounded-md bg-slate-800 text-white border border-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
                     <div class="flex justify-end space-x-4">
                         <button type="button" id="cancel-edit-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
-                        <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-md">Save Changes</button>
+                        <button type="submit" class="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md">Save Changes</button>
                     </div>
                 </form>
             `;
@@ -855,7 +855,7 @@
             if (isSimpleText) {
                 modalContent.innerHTML = `
                     <p class="text-white text-center mb-4">${content}</p>
-                    <button id="modal-ok-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-md">OK</button>
+                    <button id="modal-ok-btn" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-md">OK</button>
                 `;
                 document.getElementById('modal-ok-btn').addEventListener('click', closeModal);
             } else {
