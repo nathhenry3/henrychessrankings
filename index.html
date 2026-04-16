@@ -139,7 +139,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- GLOBAL STATE AND CONFIG ---
         let db, auth, userId;
@@ -480,6 +480,9 @@
             if (saveToDb) {
                  const playersSnapshot = await getDocs(collection(db, playersCollectionPath));
                  playersSnapshot.docs.forEach(d => allPlayersMap.set(d.id, { ...d.data(), id: d.id }));
+            } else {
+                // Fallback for non-persistent simulation usage.
+                players.forEach(p => allPlayersMap.set(p.id, JSON.parse(JSON.stringify(p))));
             }
 
             let whiteData = allPlayersMap.get(whitePlayerId);
@@ -544,7 +547,7 @@
                 loserData.recentMatchHistory[loserOpponentId] = loserHistory;
 
                 // LEAPFROG LOGIC
-                // Win 2 in a row against lower-ranked (higher number) player
+                // Win 2 in a row against a higher-ranked player (lower rank number)
                 if (winnerHistory.streak >= 2 && winnerData.rank > loserData.rank) {
                     rankChanged = true;
                     messageText = `${winnerData.name} leapfrogged ${loserData.name} (Rank ${loserData.rank})!`;
@@ -582,7 +585,8 @@
                         winnerName: winnerId === 'draw' ? null : (winnerId === whitePlayerId ? whiteData.name : blackData.name),
                         loserName: winnerId === 'draw' ? null : (winnerId === whitePlayerId ? blackData.name : whiteData.name)
                     };
-                    const historyRef = await addDoc(collection(db, gameHistoryCollectionPath), gameEntry);
+                    const historyRef = doc(collection(db, gameHistoryCollectionPath));
+                    batch.set(historyRef, gameEntry);
                     if(lastMatchData) lastMatchData.gameHistoryId = historyRef.id;
                 }
                 await batch.commit();
