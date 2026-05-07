@@ -81,9 +81,8 @@
                     </div>
                     <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-6 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Record Match</button>
                 </form>
-                <div class="mt-4 flex flex-col sm:flex-row justify-center gap-4">
+                <div class="mt-4 flex justify-center">
                     <button id="undo-match-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg" disabled>Undo Last Match</button>
-                    <button id="recalc-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 shadow-lg">Recalculate All Rankings</button>
                 </div>
             </div>
 
@@ -112,7 +111,7 @@
                 <h2 class="text-3xl font-semibold text-cyan-300 mb-4 text-center">Ranking Rules</h2>
                 <div class="space-y-3 text-slate-300 text-lg">
                     <div class="p-2 bg-slate-800/30 rounded">
-                        <span class="font-bold text-cyan-400">1. Leapfrog Rule:</span> To overtake a higher-ranked player, you must defeat them twice in a row.
+                        <span>1. Leapfrog Rule:</span> To overtake a higher-ranked player, you must defeat them twice in a row.
                         <div class="mt-1 text-sm text-slate-400 italic pl-5">
                             Example: If Player A (Rank 10) beats Player B (Rank 2) twice consecutively, Player A takes Rank 2. Player B and everyone else between Rank 2 and 10 shift down by one spot.
                         </div>
@@ -127,6 +126,14 @@
             </div>
         </main>
     </div>
+
+    <!-- Settings Button -->
+    <button id="settings-btn" type="button" class="fixed bottom-4 right-4 z-40 h-12 w-12 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-cyan-300 shadow-lg transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center" aria-label="Open settings" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+    </button>
 
     <!-- Modal Dialog -->
     <div id="modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 hidden">
@@ -213,10 +220,6 @@
             setupEventListeners();
             listenForPlayerUpdates();
             listenForGameHistoryUpdates();
-            const userIdDisplay = document.createElement('p');
-            userIdDisplay.className = 'text-center text-sm text-slate-400 mt-4';
-            userIdDisplay.textContent = `User ID: ${userId}`;
-            document.getElementById('app-container').appendChild(userIdDisplay);
         }
 
         // --- REAL-TIME DATA LISTENERS ---
@@ -363,7 +366,7 @@
             document.getElementById('add-player-form').addEventListener('submit', handleAddPlayer);
             document.getElementById('record-match-form').addEventListener('submit', handleRecordMatch);
             document.getElementById('undo-match-btn').addEventListener('click', confirmUndoLastMatch);
-            document.getElementById('recalc-btn').addEventListener('click', handleRecalculateHistory);
+            document.getElementById('settings-btn').addEventListener('click', showSettingsModal);
             document.getElementById('white-player').addEventListener('change', updateWinnerDropdown);
             document.getElementById('black-player').addEventListener('change', updateWinnerDropdown);
             leaderboardContainerEl.addEventListener('click', (e) => {
@@ -592,6 +595,23 @@
                 await batch.commit();
                 showMessage(messageText, 'success');
             }
+        }
+
+        function showSettingsModal() {
+            const content = `
+                <div class="space-y-4 text-center">
+                    <h2 class="text-2xl font-semibold text-cyan-300">Settings</h2>
+                    <p class="text-sm text-slate-300">Administrative ranking tools are available here.</p>
+                    <button id="modal-recalc-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">Recalculate All Rankings</button>
+                    <button id="modal-close-btn" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out">Close</button>
+                </div>
+            `;
+            showModal(content, false);
+            document.getElementById('modal-recalc-btn').addEventListener('click', () => {
+                closeModal();
+                handleRecalculateHistory();
+            });
+            document.getElementById('modal-close-btn').addEventListener('click', closeModal);
         }
 
         async function handleRecalculateHistory() {
